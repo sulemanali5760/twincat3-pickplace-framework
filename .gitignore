@@ -1,0 +1,11 @@
+# TwinCAT build output — regenerated on every build
+_Boot/
+_CompileInfo/
+_Libraries/
+*.tmc
+*.tpy
+*.tsproj.bak
+*.compileinfo
+
+# IDE
+.vs/

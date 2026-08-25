@@ -1,0 +1,118 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CycleManager" Id="{bbff69ce-c810-45ba-95f9-99a667e1c0cb}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_CycleManager - the step engine (cinnamon's CNM_CycleManager, trimmed to
+// the essentials). It replaces the hand-rolled "CASE nStep OF ... nStep := ..."
+// pattern: you still write a CASE, but the manager owns the step counter, the
+// start edge, error latching and stepping.
+//
+// Usage inside a RunAutomatic method:
+//
+//     fbCycle.Call(bExecute := TRUE);          // TRUE = run continuously
+//     CASE fbCycle.Step OF
+//         0: fbCycle.Await(fbLift.Extend());   // advances when the cmd is eDone
+//         1: fbCycle.Await(fbGripper.Extend());
+//         ...
+//     END_CASE
+FUNCTION_BLOCK FB_CycleManager
+VAR
+    nStep      : DINT;
+    bActive    : BOOL;
+    bError     : BOOL;
+    rtrigStart : R_TRIG;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    <Method Name="Call" Id="{35e4f190-e604-4327-aa23-c0c06755bd84}">
+      <Declaration><![CDATA[METHOD PUBLIC Call
+VAR_INPUT
+    bExecute : BOOL;   // level signal: rising edge starts at step 0
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[rtrigStart(CLK := bExecute);
+IF rtrigStart.Q THEN
+    nStep   := 0;
+    bError  := FALSE;
+    bActive := TRUE;
+END_IF
+IF NOT bExecute THEN
+    bActive := FALSE;   // dropping execute stops the sequence
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Await" Id="{10a5d7df-6664-44b9-8430-5c1aa2fa0d26}">
+      <Declaration><![CDATA[METHOD PUBLIC Await : BOOL   // TRUE on the cycle the step actually advances
+VAR_INPUT
+    eResult : E_CmdResult;   // result of the command evaluated in this step
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Await := FALSE;
+IF NOT bActive THEN
+    RETURN;
+END_IF
+CASE eResult OF
+    E_CmdResult.eDone:
+        nStep   := nStep + 1;
+        Await   := TRUE;
+    E_CmdResult.eError:
+        bError  := TRUE;
+        bActive := FALSE;   // hold on error; caller decides what to do next
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Restart" Id="{e76cf487-6968-4ad7-85a6-73d04a6d20a6}">
+      <Declaration><![CDATA[// Jump back to step 0 and keep running (used to loop a finished cycle).
+METHOD PUBLIC Restart
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nStep   := 0;
+bError  := FALSE;
+bActive := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset" Id="{4f375880-8bc7-4909-adb3-19c686b10625}">
+      <Declaration><![CDATA[// Full stop: also clears the start edge so re-entering a mode restarts cleanly.
+METHOD PUBLIC Reset
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nStep   := 0;
+bError  := FALSE;
+bActive := FALSE;
+rtrigStart(CLK := FALSE);]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="Step" Id="{36754a79-72ca-4e3d-a0b3-f62c1bc46f52}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Step : DINT]]></Declaration>
+      <Get Name="Get" Id="{f33e82e1-cdb2-49c6-a6bb-bd4da40892cc}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Step := nStep;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="Active" Id="{229418f0-7d3f-4ec8-bbc0-fd613dd5e40a}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Active : BOOL]]></Declaration>
+      <Get Name="Get" Id="{ef8c2122-86f9-4f62-bcbc-cfe9fb265c97}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Active := bActive;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="Error" Id="{807b57ff-620b-44e1-a877-c5f9f82986e2}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Error : BOOL]]></Declaration>
+      <Get Name="Get" Id="{a73935d8-88fe-4a8e-89a9-04ace774ec79}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Error := bError;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>

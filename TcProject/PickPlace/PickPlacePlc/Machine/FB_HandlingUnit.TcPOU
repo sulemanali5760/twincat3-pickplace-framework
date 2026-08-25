@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_HandlingUnit" Id="{15c1d9a8-bc44-4f9a-b8ef-d97a29af8c37}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_HandlingUnit - a functional unit with real process logic.
+//
+// It owns two devices (a lift cylinder and a gripper) and drives a full
+// pick-and-place cycle through the CycleManager. Note how the children are
+// declared with (ipParent := THIS^, ...): that single line is what puts them
+// under this unit in the tree - no wiring, no registration call.
+FUNCTION_BLOCK FB_HandlingUnit EXTENDS FB_ModeNode
+VAR
+    fbLift    : FB_PneumaticCylinder(ipParent := THIS^, sNodeName := 'Lift');
+    fbGripper : FB_PneumaticCylinder(ipParent := THIS^, sNodeName := 'Gripper');
+    fbCycle   : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    <Method Name="RunAutomatic" Id="{6439555e-9afd-4425-b381-58072f4c9483}">
+      <Declaration><![CDATA[METHOD PROTECTED RunAutomatic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// One pick-and-place loop. Await() advances the step as each command reports
+// eDone; when the last step finishes, Restart() loops the cycle.
+fbCycle.Call(bExecute := TRUE);
+
+CASE fbCycle.Step OF
+    0: fbCycle.Await(fbGripper.Retract());  // make sure the gripper is open
+    1: fbCycle.Await(fbLift.Extend());      // lower onto the part
+    2: fbCycle.Await(fbGripper.Extend());   // close gripper (pick)
+    3: fbCycle.Await(fbLift.Retract());     // lift the part
+    4: fbCycle.Await(fbLift.Extend());      // lower at the place position
+    5: fbCycle.Await(fbGripper.Retract());  // open gripper (place)
+    6: fbCycle.Await(fbLift.Retract());     // lift clear
+ELSE
+    fbCycle.Restart();                      // cycle complete -> run it again
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunStop" Id="{4d96be04-ebba-45c3-a8b0-2caf71a64b39}">
+      <Declaration><![CDATA[METHOD PROTECTED RunStop
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// Leaving automatic: reset the step engine so the next start begins at step 0.
+fbCycle.Reset();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

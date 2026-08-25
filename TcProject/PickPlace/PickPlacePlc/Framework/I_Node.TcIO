@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <Itf Name="I_Node" Id="{f9d1e508-d6f8-4586-a824-15793d58a2de}">
+    <Declaration><![CDATA[// I_Node - the one thing every element in the machine tree can do.
+// The whole framework talks to nodes only through this interface, which is
+// why a generic parent can hold a mixed list of devices and mode nodes.
+INTERFACE I_Node]]></Declaration>
+    <Method Name="Cyclic" Id="{77e74a1d-6b9d-42d4-8a24-946b72419911}">
+      <Declaration><![CDATA[// Run this node once, then recurse into its children.
+METHOD Cyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RegisterChild" Id="{0ae53f60-9f78-4c5c-9992-56846ab4e16c}">
+      <Declaration><![CDATA[METHOD RegisterChild
+VAR_INPUT
+    ipChild : I_Node;   // child that wants to join this node in the tree
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SetMode" Id="{00a1188b-0c3f-4188-9203-2d3e373c871d}">
+      <Declaration><![CDATA[METHOD SetMode
+VAR_INPUT
+    eNewMode : E_OpMode;   // pushed down the tree by the OpModeHandler
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+  </Itf>
+</TcPlcObject>

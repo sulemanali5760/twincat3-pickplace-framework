@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="MAIN" Id="{4e90cd8e-ecda-4975-87d0-5ba57b3d8a0a}" SpecialFunc="None">
+    <Declaration><![CDATA[// MAIN - the whole application is three declarations and two calls.
+//
+// fbMachine is the root of the node tree (ipParent := 0 -> no parent).
+// Declaring it constructs the entire tree, because every child registered
+// itself with its parent during FB_init.
+PROGRAM MAIN
+VAR
+    fbMachine : FB_Machine(ipParent := 0, sNodeName := 'Machine');
+    fbOpMode  : FB_OpModeHandler;
+    bInit     : BOOL := TRUE;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// First-scan wiring: tell the op-mode handler which node is the root.
+IF bInit THEN
+    fbOpMode.SetRoot(fbMachine);
+    fbOpMode.Mode := E_OpMode.eAutomatic;   // demo: start running immediately
+    bInit := FALSE;
+END_IF
+
+// One call runs the whole machine: mode is pushed down, then the tree ticks.
+fbOpMode.Cyclic();]]></ST>
+      </Implementation>
+  </POU>
+</TcPlcObject>

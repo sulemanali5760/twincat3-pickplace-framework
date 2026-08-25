@@ -1,0 +1,99 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_PneumaticCylinder" Id="{03d98799-5065-44d5-ade2-5e62360309c0}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_PneumaticCylinder - a reusable device driver (a leaf node in the tree).
+//
+// This is the cinnamon idea of a hardware driver: the outside world only sees
+// two commands, Extend() and Retract(), each returning an E_CmdResult. The
+// device itself owns the coils, the end sensors and the move-timeout watchdog.
+// The gripper in this demo is just another instance of this driver.
+//
+// bSimulate is on by default so the sequence steps on a soft-PLC with no I/O
+// mapped: the end sensors are faked after tSimStroke. Set it FALSE and map the
+// four I/O variables to real terminals for a machine.
+FUNCTION_BLOCK FB_PneumaticCylinder EXTENDS FB_CyclicNode
+VAR
+    // --- Hardware I/O (map to real terminals; e.g. AT %Q* / AT %I*) ---
+    bExtendCoil      : BOOL;
+    bRetractCoil     : BOOL;
+    bExtendedSensor  : BOOL;
+    bRetractedSensor : BOOL;
+
+    // --- Configuration ---
+    tMoveTimeout     : TIME := T#5S;
+    bSimulate        : BOOL := TRUE;
+    tSimStroke       : TIME := T#500MS;
+
+    // --- Internal state ---
+    bTargetExtend    : BOOL;
+    bLastTarget      : BOOL;
+    fbTimeout        : TON;
+    fbSimStroke      : TON;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    <Method Name="Extend" Id="{00620061-5dde-47fd-b778-c5faca5c3164}">
+      <Declaration><![CDATA[// Command the cylinder out. Returns eBusy until the extended sensor is set,
+// eError if the move times out, eDone when it arrives.
+METHOD PUBLIC Extend : E_CmdResult
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bTargetExtend := TRUE;
+IF bExtendedSensor THEN
+    Extend := E_CmdResult.eDone;
+ELSIF fbTimeout.Q THEN
+    Extend := E_CmdResult.eError;
+ELSE
+    Extend := E_CmdResult.eBusy;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Retract" Id="{9af54f71-ddff-455d-af51-34c0963b7f31}">
+      <Declaration><![CDATA[METHOD PUBLIC Retract : E_CmdResult
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bTargetExtend := FALSE;
+IF bRetractedSensor THEN
+    Retract := E_CmdResult.eDone;
+ELSIF fbTimeout.Q THEN
+    Retract := E_CmdResult.eError;
+ELSE
+    Retract := E_CmdResult.eBusy;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OnCyclic" Id="{df289298-da8b-4bae-a127-1a0e59b65d73}">
+      <Declaration><![CDATA[METHOD PROTECTED OnCyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// Drive the coils from the target and supervise the move. Runs every cycle,
+// even in steps where no command is calling this cylinder, so it holds state.
+bExtendCoil  := bTargetExtend;
+bRetractCoil := NOT bTargetExtend;
+
+fbTimeout(IN := (bTargetExtend AND NOT bExtendedSensor)
+              OR (NOT bTargetExtend AND NOT bRetractedSensor),
+          PT := tMoveTimeout);
+
+IF bSimulate THEN
+    // On a target change, clear both sensors and restart the stroke timer.
+    IF bTargetExtend <> bLastTarget THEN
+        bExtendedSensor  := FALSE;
+        bRetractedSensor := FALSE;
+        bLastTarget      := bTargetExtend;
+        fbSimStroke(IN := FALSE);
+    END_IF
+    fbSimStroke(IN := TRUE, PT := tSimStroke);
+    IF fbSimStroke.Q THEN
+        bExtendedSensor  := bTargetExtend;
+        bRetractedSensor := NOT bTargetExtend;
+    END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

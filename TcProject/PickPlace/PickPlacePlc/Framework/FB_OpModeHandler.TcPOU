@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_OpModeHandler" Id="{7ce6afff-c00f-4373-8e59-0d43fefd0c53}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_OpModeHandler - the single entry point MAIN calls each cycle.
+// It holds the machine's operating mode, pushes it down the whole tree, then
+// runs the tree. In a real project this is where you would gate mode changes
+// on the safety state, latch requests from the HMI, etc.
+FUNCTION_BLOCK FB_OpModeHandler
+VAR
+    ipRoot : I_Node;
+    eMode  : E_OpMode := E_OpMode.eStop;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    <Method Name="SetRoot" Id="{af3aa0c5-c42d-41de-9bfc-8e3d23b58a57}">
+      <Declaration><![CDATA[METHOD PUBLIC SetRoot
+VAR_INPUT
+    ipRootNode : I_Node;   // the machine node
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[ipRoot := ipRootNode;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Cyclic" Id="{3d5b1a08-e9ee-4eb3-843d-8055fb8ba5d1}">
+      <Declaration><![CDATA[METHOD PUBLIC Cyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF ipRoot <> 0 THEN
+    ipRoot.SetMode(eMode);   // distribute the mode to every node
+    ipRoot.Cyclic();         // then run the whole tree
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="Mode" Id="{68dc46ec-f1b5-47fc-8e5c-9f963eca83b3}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Mode : E_OpMode]]></Declaration>
+      <Get Name="Get" Id="{36c94199-087e-45b1-8b3d-b5a17cb0948e}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Mode := eMode;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{846b4d1f-8a10-4f36-b2c8-73025a34543a}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[eMode := Mode;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Machine" Id="{f7499a0d-a792-475b-a866-77a3addc459e}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_Machine - the root node of the tree.
+//
+// It holds the top-level functional units (here just one handling unit). Its
+// own RunAutomatic stays empty: each unit runs its own sequence via the tree.
+// This is where you would add machine-wide coordination between units later.
+FUNCTION_BLOCK FB_Machine EXTENDS FB_ModeNode
+VAR
+    fbHandling : FB_HandlingUnit(ipParent := THIS^, sNodeName := 'HandlingUnit');
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    <Method Name="RunAutomatic" Id="{65e3246c-39ec-4503-8249-c57f93e5e750}">
+      <Declaration><![CDATA[METHOD PROTECTED RunAutomatic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// No machine-level coordination needed for a single unit.
+;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

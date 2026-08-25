@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_OpMode" Id="{85459563-398a-494b-8ca8-a72bda6dcfb8}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_OpMode :
+(
+    eStop      := 0,   // machine halted / safe
+    eManual    := 1,   // operator jogs single devices from the HMI
+    eHoming    := 2,   // move every node to its defined home position
+    eAutomatic := 3    // run the production sequences
+) DINT;
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

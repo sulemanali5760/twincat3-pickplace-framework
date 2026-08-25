@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ModeNode" Id="{7af64bf2-5103-482f-be32-b99578b286da}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_ModeNode - a functional unit that owns process logic (cinnamon's
+// CNM_AbstractModeNode). It is still a cyclic node, but its per-cycle work is
+// dispatched to one method per operating mode. A derived unit only implements
+// the modes it cares about (RunAutomatic is mandatory; the rest default to
+// doing nothing).
+FUNCTION_BLOCK ABSTRACT FB_ModeNode EXTENDS FB_CyclicNode
+VAR
+    // (no own variables - state lives in the concrete unit)
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    <Method Name="OnCyclic" Id="{47327695-2aca-47f8-b509-24c4c80b6480}">
+      <Declaration><![CDATA[// Override of FB_CyclicNode.OnCyclic: route the cycle by current op-mode.
+METHOD PROTECTED OnCyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[CASE eMode OF
+    E_OpMode.eManual:    THIS^.RunManual();
+    E_OpMode.eHoming:    THIS^.RunHoming();
+    E_OpMode.eAutomatic: THIS^.RunAutomatic();
+ELSE
+    THIS^.RunStop();     // eStop and anything unexpected
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunAutomatic" Id="{2853cf51-53d6-4628-bd81-272bc33613ad}">
+      <Declaration><![CDATA[// Production sequence. Every mode node must implement this.
+METHOD PROTECTED ABSTRACT RunAutomatic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunManual" Id="{8055662a-86aa-40b9-886e-53a4af05a051}">
+      <Declaration><![CDATA[// Default: nothing. Override to allow operator jogging.
+METHOD PROTECTED RunManual
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunHoming" Id="{49af01af-e2be-446c-81b6-81130bd62ed2}">
+      <Declaration><![CDATA[// Default: nothing. Override to move the unit to its home position.
+METHOD PROTECTED RunHoming
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunStop" Id="{0f8beb2b-7f65-492b-9660-baef186be10b}">
+      <Declaration><![CDATA[// Default: nothing. Override to park the unit safely on stop.
+METHOD PROTECTED RunStop
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,90 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CyclicNode" Id="{e979ce66-5764-4db0-8f30-d222633491eb}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_CyclicNode - the base of every element in the machine.
+//
+// This is the counterpart of cinnamon's CNM_AbstractCyclicNode: a "device" or
+// monitored component that gets called every cycle. It owns a list of children
+// and, via FB_init, registers itself with its parent. That is the whole
+// hierarchical-composition trick: build the tree by declaration, and one call
+// on the root fans out to everything.
+//
+// ABSTRACT: OnCyclic is not implemented here, so this FB cannot be instantiated
+// directly. Concrete devices (e.g. FB_PneumaticCylinder) override OnCyclic.
+FUNCTION_BLOCK ABSTRACT FB_CyclicNode IMPLEMENTS I_Node
+VAR
+    sName       : STRING;                                 // node name (also its HMI/log label)
+    eMode       : E_OpMode;                               // current op-mode, pushed down from the root
+    aChildren   : ARRAY[1..GVL_Framework.cMaxChildren] OF I_Node;
+    nChildCount : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    <Method Name="FB_init" Id="{3a128fb2-4483-4bf3-a6cb-36f9ca07768c}">
+      <Declaration><![CDATA[METHOD FB_init : BOOL
+VAR_INPUT
+    bInitRetains : BOOL;    // TwinCAT-supplied
+    bInCopyCode  : BOOL;    // TwinCAT-supplied
+    ipParent     : I_Node;  // pass THIS^ of the parent, or 0 for the root
+    sNodeName    : STRING;  // human-readable name of this node
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sName := sNodeName;
+// A node registers itself with its parent the moment it is declared.
+IF ipParent <> 0 THEN
+    ipParent.RegisterChild(THIS^);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RegisterChild" Id="{507efa59-6c59-4cee-af4e-9330665fc2c6}">
+      <Declaration><![CDATA[METHOD PUBLIC RegisterChild
+VAR_INPUT
+    ipChild : I_Node;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF ipChild <> 0 AND_THEN nChildCount < GVL_Framework.cMaxChildren THEN
+    nChildCount := nChildCount + 1;
+    aChildren[nChildCount] := ipChild;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Cyclic" Id="{d70d0f06-1ee9-42b2-9279-729897875d60}">
+      <Declaration><![CDATA[METHOD PUBLIC Cyclic
+VAR
+    nI : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// Run this node first (set targets / drive I/O), then let the children act.
+THIS^.OnCyclic();
+FOR nI := 1 TO nChildCount DO
+    aChildren[nI].Cyclic();
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SetMode" Id="{ae4141de-9ea9-45ac-8046-fea79e26deef}">
+      <Declaration><![CDATA[METHOD PUBLIC SetMode
+VAR_INPUT
+    eNewMode : E_OpMode;
+END_VAR
+VAR
+    nI : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[eMode := eNewMode;
+FOR nI := 1 TO nChildCount DO
+    aChildren[nI].SetMode(eNewMode);
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OnCyclic" Id="{323c2de9-9bb9-439a-9803-9450d94c9529}">
+      <Declaration><![CDATA[// The node's own per-cycle work. Implemented by every concrete node.
+METHOD PROTECTED ABSTRACT OnCyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
