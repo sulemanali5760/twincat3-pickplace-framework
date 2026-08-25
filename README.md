@@ -78,6 +78,73 @@ To drive real hardware: set each device's `bSimulate := FALSE` and map
 
 Built against TwinCAT 3.1.4026.25, target `TwinCAT RT (x64)`.
 
+## Use it in your own machine
+
+The framework is six objects; the other six are the example. To build your own
+unit, copy the `Framework/` folder into your PLC project and delete
+`Devices/` and `Machine/`.
+
+| Keep — the framework | Delete — the example |
+|---|---|
+| `I_Node`, `FB_CyclicNode`, `FB_ModeNode` | `FB_PneumaticCylinder` |
+| `FB_CycleManager`, `FB_OpModeHandler` | `FB_HandlingUnit`, `FB_Machine` |
+| `E_OpMode`, `E_CmdResult`, `GVL_Framework` | `MAIN` |
+
+**A new device** extends `FB_CyclicNode` and implements `OnCyclic()`. Give it
+commands that return `E_CmdResult` so a sequence can await them:
+
+```iecst
+FUNCTION_BLOCK FB_Valve EXTENDS FB_CyclicNode
+VAR
+    bOpenCoil   : BOOL;
+    bOpenSensor : BOOL;
+    bTarget     : BOOL;
+END_VAR
+
+METHOD PUBLIC Open : E_CmdResult
+bTarget := TRUE;
+IF bOpenSensor THEN
+    Open := E_CmdResult.eDone;
+ELSE
+    Open := E_CmdResult.eBusy;
+END_IF
+
+METHOD PROTECTED OnCyclic
+bOpenCoil := bTarget;
+```
+
+**A new unit** extends `FB_ModeNode`, declares its devices with
+`ipParent := THIS^`, and writes its sequence in `RunAutomatic`:
+
+```iecst
+FUNCTION_BLOCK FB_Filling EXTENDS FB_ModeNode
+VAR
+    fbValve : FB_Valve(ipParent := THIS^, sNodeName := 'Valve');
+    fbCycle : FB_CycleManager;
+END_VAR
+
+METHOD PROTECTED RunAutomatic
+fbCycle.Call(bExecute := TRUE);
+CASE fbCycle.Step OF
+    0: fbCycle.Await(fbValve.Open());
+    1: fbCycle.Await(fbValve.Close());
+ELSE
+    fbCycle.Restart();
+END_CASE
+```
+
+That is the whole contract. Declaring `fbValve` with `ipParent := THIS^` is
+what puts it in the tree — there is no registration call to forget, and no
+init list to keep in sync.
+
+Two rules worth knowing:
+
+- **Parent runs before children.** `OnCyclic()` fires on the node first, then
+  recurses. A unit sets device targets and the devices act on them in the same
+  scan, so there is no one-cycle lag.
+- **`cMaxChildren` is 16.** Raise it in `GVL_Framework` if a node needs more
+  direct children. Registration beyond the limit is silently ignored.
+
 ## Honest scope — what this is and isn't
 
 - **Is:** a clean, readable core showing cinnamon's architecture (tree, cyclic +
@@ -87,3 +154,7 @@ Built against TwinCAT 3.1.4026.25, target `TwinCAT RT (x64)`.
   recipes/metrics, and — most of all — **not validated on real machines**. Those
   are cinnamon's actual value. For a production line, use cinnamon; use this to
   understand the pattern or to seed a small, purpose-built unit.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). Use it, change it, ship it.
