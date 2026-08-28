@@ -344,16 +344,21 @@
     cs.innerHTML = html;
   }
 
+  // 0 = retracted, 1 = extended, fractional while the stroke is running
+  function travel(c) {
+    if (c.at === c.target) return c.at ? 1 : 0;
+    var p = Math.min(1, c.t / STROKE);
+    return c.target ? p : 1 - p;
+  }
+
   function paintMachine() {
-    var down = state.lift.at, moving = state.lift.at !== state.lift.target;
-    var y = down ? 108 : 60;
-    if (moving) y = state.lift.target ? 84 : 84;     // mid-stroke
+    var y = 60 + 48 * travel(state.lift);
     el("rod").setAttribute("y2", y);
     el("carriage").setAttribute("transform", "translate(0," + (y - 60) + ")");
 
-    var closed = state.gripper.at;
-    el("jawL").setAttribute("x2", closed ? 140 : 132);
-    el("jawR").setAttribute("x2", closed ? 160 : 168);
+    var g = travel(state.gripper);
+    el("jawL").setAttribute("x2", 132 + 8 * g);
+    el("jawR").setAttribute("x2", 168 - 8 * g);
 
     el("part").setAttribute("opacity", state.holding ? 1 : 0);
     el("restPart").setAttribute("opacity", (state.holding || state.placed) ? 0 : 1);
