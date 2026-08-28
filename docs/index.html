@@ -72,6 +72,11 @@
   .stepdesc{margin-top:.7rem;font-size:.88rem;color:var(--muted);min-height:2.6rem}
   .stepdesc b{color:var(--text)}
 
+  .idle{background:var(--panel-2);border-left:3px solid var(--warn);
+    border-radius:0 8px 8px 0;padding:.55rem .75rem;margin-bottom:.8rem;
+    font-size:.83rem;color:var(--muted)}
+  .idle b{color:var(--text)}
+
   .why{margin-top:1.25rem;background:var(--panel);border:1px solid var(--border);
     border-radius:var(--radius);padding:1.1rem 1.25rem}
   .why h3{margin:0 0 .4rem;font-size:1rem}
@@ -183,12 +188,19 @@
         The two cylinders are the same function block, twice — one lifts, one grips.
       </p>
 
+      <div class="idle" id="idleBadge" style="display:none">
+        <b>Sequence idle — this is correct.</b>
+        <span id="idleWhy"></span>
+        The tree is still being scanned every cycle (watch the pulse on the left);
+        the mode simply dispatches somewhere that does nothing.
+      </div>
+
       <svg viewBox="0 0 300 170" aria-label="Lift and gripper">
         <line x1="20" y1="18" x2="280" y2="18" stroke="var(--border)" stroke-width="3"/>
         <!-- lift rod -->
         <line id="rod" x1="150" y1="18" x2="150" y2="60"
               stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/>
-        <!-- gripper body -->
+        <!-- gripper body, carried by the lift -->
         <g id="carriage">
           <rect x="126" y="58" width="48" height="20" rx="4"
                 fill="var(--panel-2)" stroke="var(--border)" stroke-width="2"/>
@@ -196,17 +208,17 @@
                 stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
           <line id="jawR" x1="164" y1="78" x2="168" y2="98"
                 stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
-          <rect id="part" x="140" y="86" width="20" height="14" rx="2"
+          <rect id="partHeld" x="140" y="86" width="20" height="14" rx="2"
                 fill="var(--cool)" opacity="0"/>
         </g>
-        <!-- pick and place stations -->
-        <rect x="60" y="140" width="60" height="10" rx="2" fill="var(--border)"/>
-        <text x="90" y="163" text-anchor="middle" font-size="9" fill="var(--dim)">pick</text>
-        <rect x="180" y="140" width="60" height="10" rx="2" fill="var(--border)"/>
-        <text x="210" y="163" text-anchor="middle" font-size="9" fill="var(--dim)">place</text>
-        <rect id="restPart" x="80" y="126" width="20" height="14" rx="2" fill="var(--cool)"/>
-        <rect id="donePart" x="200" y="126" width="20" height="14" rx="2"
-              fill="var(--cool)" opacity="0"/>
+        <!-- One station. FB_HandlingUnit owns a lift and a gripper and nothing
+             else - there is no axis to carry the part anywhere. -->
+        <rect x="110" y="140" width="80" height="10" rx="2" fill="var(--border)"/>
+        <rect id="partOnTable" x="140" y="126" width="20" height="14" rx="2"
+              fill="var(--cool)"/>
+        <text x="150" y="163" text-anchor="middle" font-size="9" fill="var(--dim)">
+          one position — this unit has no traverse axis
+        </text>
       </svg>
 
       <div class="rows">
@@ -263,8 +275,8 @@
     { cmd: "fbLift.Extend()",     dev: "lift",    to: true,  text: "Lower onto the part." },
     { cmd: "fbGripper.Extend()",  dev: "gripper", to: true,  text: "Close the gripper — <b>pick</b>." },
     { cmd: "fbLift.Retract()",    dev: "lift",    to: false, text: "Lift the part clear." },
-    { cmd: "fbLift.Extend()",     dev: "lift",    to: true,  text: "Lower at the place position." },
-    { cmd: "fbGripper.Retract()", dev: "gripper", to: false, text: "Open the gripper — <b>place</b>." },
+    { cmd: "fbLift.Extend()",     dev: "lift",    to: true,  text: "Lower again. On a real cell a traverse axis would have moved by now — this unit has none, so it comes back down in the same place." },
+    { cmd: "fbGripper.Retract()", dev: "gripper", to: false, text: "Open the gripper — <b>release</b>." },
     { cmd: "fbLift.Retract()",    dev: "lift",    to: false, text: "Lift clear. Then Restart() loops the cycle." }
   ];
 
@@ -283,7 +295,7 @@
     step: 0, active: true,
     lift:    { target: false, at: false, t: 0 },
     gripper: { target: false, at: false, t: 0 },
-    holding: false, placed: false,
+    holding: false,
     scanT: 0, scanIdx: 0, modeFlash: 0
   };
 
@@ -307,9 +319,9 @@
     var dev = s.dev === "lift" ? state.lift : state.gripper;
     if (command(dev, s.to) === "eDone") {
       if (state.step === 2) state.holding = true;    // gripper closed on the part
-      if (state.step === 5) { state.holding = false; state.placed = true; }
+      if (state.step === 5) state.holding = false;
       state.step += 1;
-      if (state.step >= SEQ.length) { state.step = 0; state.placed = false; }
+      if (state.step >= SEQ.length) state.step = 0;
     }
   }
   function runStop() { state.step = 0; state.active = false; }   // fbCycle.Reset()
@@ -352,7 +364,7 @@
   }
 
   function paintMachine() {
-    var y = 60 + 48 * travel(state.lift);
+    var y = 60 + 36 * travel(state.lift);
     el("rod").setAttribute("y2", y);
     el("carriage").setAttribute("transform", "translate(0," + (y - 60) + ")");
 
@@ -360,9 +372,18 @@
     el("jawL").setAttribute("x2", 132 + 8 * g);
     el("jawR").setAttribute("x2", 168 - 8 * g);
 
-    el("part").setAttribute("opacity", state.holding ? 1 : 0);
-    el("restPart").setAttribute("opacity", (state.holding || state.placed) ? 0 : 1);
-    el("donePart").setAttribute("opacity", state.placed ? 1 : 0);
+    // The part is either in the jaws or on the table — never both, and never
+    // anywhere else, because nothing can carry it sideways.
+    el("partHeld").setAttribute("opacity", state.holding ? 1 : 0);
+    el("partOnTable").setAttribute("opacity", state.holding ? 0 : 1);
+
+    var idle = state.mode !== "eAutomatic";
+    el("idleBadge").style.display = idle ? "block" : "none";
+    if (idle) {
+      el("idleWhy").textContent = state.mode === "eStop"
+        ? "RunStop() ran fbCycle.Reset(), so the step engine is back at 0 and the cylinders hold their last position."
+        : "FB_HandlingUnit never overrides this mode, so FB_ModeNode's empty default runs.";
+    }
 
     el("vStep").textContent = state.step;
     el("vLift").textContent = state.lift.at === state.lift.target
