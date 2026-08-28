@@ -1,5 +1,11 @@
 # Pick-&-Place demo — a minimal cinnamon-style TwinCAT 3 framework
 
+### ▶ [See the node tree run in your browser](https://sulemanali5760.github.io/twincat3-pickplace-framework/)
+
+No TwinCAT needed. Watch one `Cyclic()` call fan out through the tree, and
+switch the operating mode to see `SetMode()` push down it. An illustration of
+the architecture — the Structured Text itself runs on a PLC, not in a page.
+
 A small, self-contained automation framework in Structured Text that borrows
 [ekvip cinnamon's](https://ekvip.com/en/cinnamon-framework) core ideas, plus one
 demo machine built on top of it so you can watch the pattern run.

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How the node tree works — TwinCAT 3 Pick-&-Place Framework</title>
+<meta name="description" content="One Cyclic() call runs the whole machine. Watch it fan out through the tree, and watch an operating mode push down it.">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161922; --panel-2:#1c2029; --border:#262b38;
+    --text:#e6e8ee; --muted:#9aa1b1; --dim:#6b7280;
+    --accent:#ff8a3d; --ok:#3ddc97; --warn:#ffc857; --bad:#ff5c5c; --cool:#6ea8fe;
+    --radius:12px;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f7f8fa; --panel:#fff; --panel-2:#f0f2f6; --border:#dfe3ea;
+      --text:#12141a; --muted:#5b6472; --dim:#8b93a1;
+      --cool:#2563eb; --ok:#0f9d63; --warn:#b7791f; --bad:#d63b3b;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);line-height:1.6;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:2rem 1.25rem 4rem}
+  h1{font-size:clamp(1.6rem,4vw,2.2rem);margin:0 0 .4rem;letter-spacing:-.02em}
+  .sub{color:var(--muted);margin:0 0 .3rem;max-width:62ch}
+  a{color:var(--accent)}
+  .backlink{font-size:.9rem;margin:.2rem 0 0}
+
+  .note{
+    margin:1.1rem 0 1.25rem;padding:.7rem .95rem;font-size:.87rem;
+    background:var(--panel-2);border-left:3px solid var(--warn);
+    border-radius:0 8px 8px 0;color:var(--muted);
+  }
+  .note b{color:var(--text)}
+
+  .controls{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:1rem}
+  .controls .label{font-size:.78rem;color:var(--muted);
+    letter-spacing:.08em;text-transform:uppercase;margin-right:.2rem}
+  button{font:inherit;font-size:.87rem;font-weight:600;cursor:pointer;
+    background:transparent;color:var(--muted);
+    border:1px solid var(--border);border-radius:8px;padding:.38rem .8rem}
+  button:hover{color:var(--text);border-color:var(--muted)}
+  button.on{background:var(--accent);border-color:var(--accent);color:#12141a}
+  button.ghost{margin-left:auto}
+
+  .grid{display:grid;grid-template-columns:1.15fr 1fr;gap:.9rem}
+  @media (max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:1.1rem}
+  .card h2{font-size:1.02rem;margin:0 0 .15rem}
+  .plain{font-size:.85rem;color:var(--muted);margin:.3rem 0 .9rem}
+  svg{display:block;width:100%;height:auto}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  .callstack{background:var(--panel-2);border:1px solid var(--border);
+    border-radius:8px;padding:.6rem .75rem;font-size:.8rem;min-height:7.4rem}
+  .callstack div{padding:.08rem 0;color:var(--dim);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .callstack div.hit{color:var(--accent);font-weight:600}
+
+  .rows{font-size:.86rem;margin-top:.7rem}
+  .row{display:flex;justify-content:space-between;padding:.28rem 0;
+    border-bottom:1px dashed var(--border)}
+  .row:last-child{border-bottom:none}
+  .row span:last-child{font-weight:650;font-variant-numeric:tabular-nums}
+
+  .stepdesc{margin-top:.7rem;font-size:.88rem;color:var(--muted);min-height:2.6rem}
+  .stepdesc b{color:var(--text)}
+
+  .why{margin-top:1.25rem;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:1.1rem 1.25rem}
+  .why h3{margin:0 0 .4rem;font-size:1rem}
+  .why p{margin:.45rem 0;color:var(--muted);font-size:.92rem}
+  .why strong{color:var(--text)}
+  code{background:var(--panel-2);border:1px solid var(--border);
+    border-radius:4px;padding:.08em .35em;font-size:.9em}
+  footer{margin-top:2rem;text-align:center;font-size:.85rem;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>One call runs the whole machine</h1>
+    <p class="sub">
+      The machine is a tree of nodes. A single <code>Cyclic()</code> on the root
+      reaches every device; a single <code>SetMode()</code> pushes the operating
+      mode to all of them. Watch both happen.
+    </p>
+    <p class="backlink"><a href="https://github.com/sulemanali5760/twincat3-pickplace-framework">← back to the repository</a></p>
+  </header>
+
+  <div class="note">
+    <b>This page is an illustration, not the program.</b> The framework is written
+    in Structured Text and runs on a PLC. What you see here is a JavaScript model
+    of the same logic, slowed down so the call order is visible — a real task
+    scans every 10&nbsp;ms, far faster than the eye.
+  </div>
+
+  <div class="controls">
+    <span class="label">Operating mode</span>
+    <button data-mode="eAutomatic" class="on">Automatic</button>
+    <button data-mode="eManual">Manual</button>
+    <button data-mode="eHoming">Homing</button>
+    <button data-mode="eStop">Stop</button>
+    <button id="pause" class="ghost">Pause</button>
+  </div>
+
+  <div class="grid">
+
+    <!-- ---------------- the tree ---------------- -->
+    <section class="card">
+      <h2>The node tree</h2>
+      <p class="plain">
+        Each node holds its children and calls them. The orange pulse is one
+        scan travelling down; the blue flash is a mode being pushed down.
+      </p>
+
+      <svg viewBox="0 0 420 250" aria-label="The machine's node tree">
+        <!-- edges -->
+        <line x1="210" y1="52" x2="210" y2="88" stroke="var(--border)" stroke-width="2"/>
+        <line x1="210" y1="124" x2="210" y2="146" stroke="var(--border)" stroke-width="2"/>
+        <line x1="120" y1="146" x2="300" y2="146" stroke="var(--border)" stroke-width="2"/>
+        <line x1="120" y1="146" x2="120" y2="182" stroke="var(--border)" stroke-width="2"/>
+        <line x1="300" y1="146" x2="300" y2="182" stroke="var(--border)" stroke-width="2"/>
+
+        <!-- Machine -->
+        <g id="n-machine">
+          <rect x="140" y="20" width="140" height="32" rx="7"
+                fill="var(--panel-2)" stroke="var(--border)" stroke-width="2"/>
+          <text x="210" y="35" text-anchor="middle" font-size="12" font-weight="600"
+                fill="var(--text)">Machine</text>
+          <text x="210" y="46" text-anchor="middle" font-size="8.5"
+                fill="var(--muted)">FB_ModeNode · root</text>
+        </g>
+
+        <!-- HandlingUnit -->
+        <g id="n-handling">
+          <rect x="132" y="88" width="156" height="36" rx="7"
+                fill="var(--panel-2)" stroke="var(--border)" stroke-width="2"/>
+          <text x="210" y="103" text-anchor="middle" font-size="12" font-weight="600"
+                fill="var(--text)">HandlingUnit</text>
+          <text x="210" y="115" text-anchor="middle" font-size="8.5"
+                fill="var(--muted)">FB_ModeNode · owns the sequence</text>
+        </g>
+
+        <!-- Lift -->
+        <g id="n-lift">
+          <rect x="52" y="182" width="136" height="36" rx="7"
+                fill="var(--panel-2)" stroke="var(--border)" stroke-width="2"/>
+          <text x="120" y="197" text-anchor="middle" font-size="12" font-weight="600"
+                fill="var(--text)">Lift</text>
+          <text x="120" y="209" text-anchor="middle" font-size="8.5"
+                fill="var(--muted)">FB_PneumaticCylinder</text>
+        </g>
+
+        <!-- Gripper -->
+        <g id="n-gripper">
+          <rect x="232" y="182" width="136" height="36" rx="7"
+                fill="var(--panel-2)" stroke="var(--border)" stroke-width="2"/>
+          <text x="300" y="197" text-anchor="middle" font-size="12" font-weight="600"
+                fill="var(--text)">Gripper</text>
+          <text x="300" y="209" text-anchor="middle" font-size="8.5"
+                fill="var(--muted)">FB_PneumaticCylinder</text>
+        </g>
+
+        <text x="210" y="240" text-anchor="middle" font-size="9" fill="var(--dim)"
+              id="treeCaption">MAIN calls fbOpMode.Cyclic() once per scan</text>
+      </svg>
+
+      <div class="callstack mono" id="callstack"></div>
+    </section>
+
+    <!-- ---------------- the machine ---------------- -->
+    <section class="card">
+      <h2>What the devices do</h2>
+      <p class="plain">
+        The two cylinders are the same function block, twice — one lifts, one grips.
+      </p>
+
+      <svg viewBox="0 0 300 170" aria-label="Lift and gripper">
+        <line x1="20" y1="18" x2="280" y2="18" stroke="var(--border)" stroke-width="3"/>
+        <!-- lift rod -->
+        <line id="rod" x1="150" y1="18" x2="150" y2="60"
+              stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/>
+        <!-- gripper body -->
+        <g id="carriage">
+          <rect x="126" y="58" width="48" height="20" rx="4"
+                fill="var(--panel-2)" stroke="var(--border)" stroke-width="2"/>
+          <line id="jawL" x1="136" y1="78" x2="132" y2="98"
+                stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
+          <line id="jawR" x1="164" y1="78" x2="168" y2="98"
+                stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
+          <rect id="part" x="140" y="86" width="20" height="14" rx="2"
+                fill="var(--cool)" opacity="0"/>
+        </g>
+        <!-- pick and place stations -->
+        <rect x="60" y="140" width="60" height="10" rx="2" fill="var(--border)"/>
+        <text x="90" y="163" text-anchor="middle" font-size="9" fill="var(--dim)">pick</text>
+        <rect x="180" y="140" width="60" height="10" rx="2" fill="var(--border)"/>
+        <text x="210" y="163" text-anchor="middle" font-size="9" fill="var(--dim)">place</text>
+        <rect id="restPart" x="80" y="126" width="20" height="14" rx="2" fill="var(--cool)"/>
+        <rect id="donePart" x="200" y="126" width="20" height="14" rx="2"
+              fill="var(--cool)" opacity="0"/>
+      </svg>
+
+      <div class="rows">
+        <div class="row"><span>fbCycle.nStep</span><span id="vStep">0</span></div>
+        <div class="row"><span>Lift</span><span id="vLift">—</span></div>
+        <div class="row"><span>Gripper</span><span id="vGrip">—</span></div>
+        <div class="row"><span>Dispatched to</span><span id="vDispatch" class="mono">RunAutomatic</span></div>
+      </div>
+
+      <p class="stepdesc" id="stepdesc"></p>
+    </section>
+  </div>
+
+  <div class="why">
+    <h3>What to notice</h3>
+    <p>
+      <strong>Nothing wires the tree together.</strong> A child registers itself with
+      its parent the moment it is declared —
+      <code>fbLift : FB_PneumaticCylinder(ipParent := THIS^, sNodeName := 'Lift');</code>
+      — so writing the declaration <em>is</em> building the machine. There is no
+      registration list to keep in step.
+    </p>
+    <p>
+      <strong>Manual and Homing do nothing here, on purpose.</strong> Press them.
+      <code>FB_ModeNode</code> dispatches to <code>RunManual()</code> and
+      <code>RunHoming()</code>, but this demo's handling unit never overrides them,
+      so the base class's empty default runs. A unit implements only the modes it
+      actually needs.
+    </p>
+    <p>
+      <strong>The cylinders keep running in Stop.</strong> They extend
+      <code>FB_CyclicNode</code>, not <code>FB_ModeNode</code>, so they are not
+      mode-dispatched at all — they hold their last commanded position while the
+      sequence above them resets. That separation is why a device driver can be
+      reused in any machine.
+    </p>
+  </div>
+
+  <footer>
+    The sequence, step order and stroke timing mirror
+    <span class="mono">FB_HandlingUnit</span> and <span class="mono">FB_CycleManager</span> in the repository.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var el = function (id) { return document.getElementById(id); };
+
+  // --- the sequence, exactly as FB_HandlingUnit.RunAutomatic writes it -------
+  var SEQ = [
+    { cmd: "fbGripper.Retract()", dev: "gripper", to: false, text: "Open the gripper, so we know where it is." },
+    { cmd: "fbLift.Extend()",     dev: "lift",    to: true,  text: "Lower onto the part." },
+    { cmd: "fbGripper.Extend()",  dev: "gripper", to: true,  text: "Close the gripper — <b>pick</b>." },
+    { cmd: "fbLift.Retract()",    dev: "lift",    to: false, text: "Lift the part clear." },
+    { cmd: "fbLift.Extend()",     dev: "lift",    to: true,  text: "Lower at the place position." },
+    { cmd: "fbGripper.Retract()", dev: "gripper", to: false, text: "Open the gripper — <b>place</b>." },
+    { cmd: "fbLift.Retract()",    dev: "lift",    to: false, text: "Lift clear. Then Restart() loops the cycle." }
+  ];
+
+  var STROKE = 0.6;          // tSimStroke, slowed for the eye
+  var SCAN   = 0.75;         // one visualised scan sweep
+  var NODES  = ["n-machine", "n-handling", "n-lift", "n-gripper"];
+  var CALLS  = [
+    "fbMachine.Cyclic()",
+    "  fbHandling.Cyclic()",
+    "    fbLift.Cyclic()",
+    "    fbGripper.Cyclic()"
+  ];
+
+  var state = {
+    mode: "eAutomatic", running: true,
+    step: 0, active: true,
+    lift:    { target: false, at: false, t: 0 },
+    gripper: { target: false, at: false, t: 0 },
+    holding: false, placed: false,
+    scanT: 0, scanIdx: 0, modeFlash: 0
+  };
+
+  // --- FB_PneumaticCylinder.OnCyclic (bSimulate = TRUE) ---------------------
+  function cylinder(c, dt) {
+    if (c.at !== c.target) {
+      c.t += dt;
+      if (c.t >= STROKE) { c.at = c.target; c.t = 0; }
+    } else { c.t = 0; }
+  }
+  function command(c, target) {          // Extend()/Retract() -> eBusy|eDone
+    if (c.target !== target) { c.target = target; c.t = 0; }
+    return c.at === target ? "eDone" : "eBusy";
+  }
+
+  // --- FB_ModeNode.OnCyclic dispatch ---------------------------------------
+  function runAutomatic() {
+    if (!state.active) { state.step = 0; state.active = true; }
+    var s = SEQ[state.step];
+    if (!s) { state.step = 0; return; }              // ELSE -> Restart()
+    var dev = s.dev === "lift" ? state.lift : state.gripper;
+    if (command(dev, s.to) === "eDone") {
+      if (state.step === 2) state.holding = true;    // gripper closed on the part
+      if (state.step === 5) { state.holding = false; state.placed = true; }
+      state.step += 1;
+      if (state.step >= SEQ.length) { state.step = 0; state.placed = false; }
+    }
+  }
+  function runStop() { state.step = 0; state.active = false; }   // fbCycle.Reset()
+
+  function tick(dt) {
+    if (state.mode === "eAutomatic")      runAutomatic();
+    else if (state.mode === "eStop")      runStop();
+    // eManual / eHoming: the base class defaults do nothing.
+
+    cylinder(state.lift, dt);
+    cylinder(state.gripper, dt);
+  }
+
+  // --- drawing --------------------------------------------------------------
+  function paintTree() {
+    for (var i = 0; i < NODES.length; i++) {
+      var rect = el(NODES[i]).querySelector("rect");
+      var lit = state.running && i === state.scanIdx;
+      if (state.modeFlash > 0) {
+        rect.setAttribute("stroke", "var(--cool)");
+        rect.setAttribute("stroke-width", "3");
+      } else {
+        rect.setAttribute("stroke", lit ? "var(--accent)" : "var(--border)");
+        rect.setAttribute("stroke-width", lit ? "3" : "2");
+      }
+    }
+    var cs = el("callstack"), html = "";
+    for (var j = 0; j < CALLS.length; j++) {
+      var on = state.running && j <= state.scanIdx;
+      html += '<div class="' + (on ? "hit" : "") + '">' + CALLS[j] + "</div>";
+    }
+    cs.innerHTML = html;
+  }
+
+  function paintMachine() {
+    var down = state.lift.at, moving = state.lift.at !== state.lift.target;
+    var y = down ? 108 : 60;
+    if (moving) y = state.lift.target ? 84 : 84;     // mid-stroke
+    el("rod").setAttribute("y2", y);
+    el("carriage").setAttribute("transform", "translate(0," + (y - 60) + ")");
+
+    var closed = state.gripper.at;
+    el("jawL").setAttribute("x2", closed ? 140 : 132);
+    el("jawR").setAttribute("x2", closed ? 160 : 168);
+
+    el("part").setAttribute("opacity", state.holding ? 1 : 0);
+    el("restPart").setAttribute("opacity", (state.holding || state.placed) ? 0 : 1);
+    el("donePart").setAttribute("opacity", state.placed ? 1 : 0);
+
+    el("vStep").textContent = state.step;
+    el("vLift").textContent = state.lift.at === state.lift.target
+      ? (state.lift.at ? "extended" : "retracted") : "moving…";
+    el("vGrip").textContent = state.gripper.at === state.gripper.target
+      ? (state.gripper.at ? "closed" : "open") : "moving…";
+
+    var dispatch = { eAutomatic: "RunAutomatic", eManual: "RunManual",
+                     eHoming: "RunHoming", eStop: "RunStop" }[state.mode];
+    el("vDispatch").textContent = dispatch + "()";
+
+    var d = el("stepdesc");
+    if (state.mode === "eAutomatic") d.innerHTML = SEQ[state.step] ? SEQ[state.step].text : "";
+    else if (state.mode === "eStop")
+      d.innerHTML = "<b>RunStop()</b> called fbCycle.Reset() — the step engine is back at 0. The cylinders hold position.";
+    else
+      d.innerHTML = "<b>" + dispatch + "()</b> is not overridden by this unit, so the base class's empty default runs. Nothing moves — by design.";
+  }
+
+  var last = null;
+  function frame(now) {
+    if (last === null) last = now;
+    var dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+
+    if (state.running) {
+      tick(dt);
+      state.scanT += dt;
+      if (state.scanT >= SCAN / NODES.length) {
+        state.scanT = 0;
+        state.scanIdx = (state.scanIdx + 1) % NODES.length;
+      }
+      if (state.modeFlash > 0) state.modeFlash -= dt;
+    }
+    paintTree();
+    paintMachine();
+    requestAnimationFrame(frame);
+  }
+
+  // --- controls -------------------------------------------------------------
+  var modeButtons = document.querySelectorAll("[data-mode]");
+  Array.prototype.forEach.call(modeButtons, function (b) {
+    b.addEventListener("click", function () {
+      Array.prototype.forEach.call(modeButtons, function (o) { o.classList.remove("on"); });
+      b.classList.add("on");
+      state.mode = b.getAttribute("data-mode");
+      state.modeFlash = 0.45;      // SetMode() sweeping down the tree
+      el("treeCaption").textContent =
+        "fbOpMode.Mode := E_OpMode." + state.mode + "  →  SetMode() down the tree";
+    });
+  });
+  el("pause").addEventListener("click", function () {
+    state.running = !state.running;
+    this.textContent = state.running ? "Pause" : "Play";
+  });
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
