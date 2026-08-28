@@ -12,6 +12,13 @@ VAR
     fbLift    : FB_PneumaticCylinder(ipParent := THIS^, sNodeName := 'Lift');
     fbGripper : FB_PneumaticCylinder(ipParent := THIS^, sNodeName := 'Gripper');
     fbCycle   : FB_CycleManager;
+
+    // Operator jog commands, written by the HMI. Only read in eManual.
+    bJogLiftDown  : BOOL;
+    bJogLiftUp    : BOOL;
+    bJogGripClose : BOOL;
+    bJogGripOpen  : BOOL;
+    bHomed        : BOOL;   // reached the home position
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[]]></ST>
@@ -44,7 +51,55 @@ VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[// Leaving automatic: reset the step engine so the next start begins at step 0.
-fbCycle.Reset();]]></ST>
+fbCycle.Reset();
+
+// Drop any held jog, or re-entering manual would move the unit immediately.
+bJogLiftDown  := FALSE;
+bJogLiftUp    := FALSE;
+bJogGripClose := FALSE;
+bJogGripOpen  := FALSE;
+bHomed        := FALSE;
+
+// The cylinders are not mode-dispatched, so they hold position. Parking
+// here would drop whatever the gripper is holding.]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunManual" Id="{a1f3c7b2-5e08-4d61-9c3a-7b2e4f80d115}">
+      <Declaration><![CDATA[METHOD PROTECTED RunManual
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// Operator jogging: each button drives a device directly, no sequence.
+// Opposing buttons cancel, so holding both does nothing.
+IF bJogLiftDown AND NOT bJogLiftUp THEN
+    fbLift.Extend();
+ELSIF bJogLiftUp AND NOT bJogLiftDown THEN
+    fbLift.Retract();
+END_IF
+
+IF bJogGripClose AND NOT bJogGripOpen THEN
+    fbGripper.Extend();
+ELSIF bJogGripOpen AND NOT bJogGripClose THEN
+    fbGripper.Retract();
+END_IF
+
+IF bJogLiftDown OR bJogLiftUp OR bJogGripClose OR bJogGripOpen THEN
+    bHomed := FALSE;   // moved by hand, no longer at a known position
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunHoming" Id="{c48d6a91-3f27-4b5e-8d10-6a9c2e5b7f43}">
+      <Declaration><![CDATA[METHOD PROTECTED RunHoming
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// Home = gripper open, lift raised. The order matters: open FIRST, so a
+// held part is released where it sits instead of being carried away.
+IF fbGripper.Retract() = E_CmdResult.eDone THEN
+    IF fbLift.Retract() = E_CmdResult.eDone THEN
+        bHomed := TRUE;
+    END_IF
+END_IF]]></ST>
       </Implementation>
     </Method>
   </POU>

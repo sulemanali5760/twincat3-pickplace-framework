@@ -76,6 +76,11 @@
     border-radius:0 8px 8px 0;padding:.55rem .75rem;margin-bottom:.8rem;
     font-size:.83rem;color:var(--muted)}
   .idle b{color:var(--text)}
+  .jogs{display:flex;gap:.4rem;flex-wrap:wrap;margin:.55rem 0 .35rem}
+  button.jog{font-size:.8rem;padding:.3rem .65rem;
+    border-color:var(--muted);color:var(--text);touch-action:none;user-select:none}
+  button.jog.held{background:var(--accent);border-color:var(--accent);color:#12141a}
+  .hintline{display:block;font-size:.78rem;color:var(--dim)}
 
   .why{margin-top:1.25rem;background:var(--panel);border:1px solid var(--border);
     border-radius:var(--radius);padding:1.1rem 1.25rem}
@@ -188,12 +193,19 @@
         The two cylinders are the same function block, twice — one lifts, one grips.
       </p>
 
-      <div class="idle" id="idleBadge" style="display:none">
-        <b>Sequence idle — this is correct.</b>
-        <span id="idleWhy"></span>
-        The tree is still being scanned every cycle (watch the pulse on the left);
-        the mode simply dispatches somewhere that does nothing.
+      <div class="idle" id="manualPanel" style="display:none">
+        <b>Manual — hold a button to jog.</b>
+        <span>Each one drives a device directly. The sequence is not involved.</span>
+        <div class="jogs">
+          <button class="jog" data-jog="bJogLiftDown">Lift ↓</button>
+          <button class="jog" data-jog="bJogLiftUp">Lift ↑</button>
+          <button class="jog" data-jog="bJogGripClose">Grip close</button>
+          <button class="jog" data-jog="bJogGripOpen">Grip open</button>
+        </div>
+        <span class="hintline">Opposing buttons cancel — hold both and nothing moves.</span>
       </div>
+
+      <div class="idle" id="modeNote" style="display:none"></div>
 
       <svg viewBox="0 0 300 170" aria-label="Lift and gripper">
         <line x1="20" y1="18" x2="280" y2="18" stroke="var(--border)" stroke-width="3"/>
@@ -225,6 +237,7 @@
         <div class="row"><span>fbCycle.nStep</span><span id="vStep">0</span></div>
         <div class="row"><span>Lift</span><span id="vLift">—</span></div>
         <div class="row"><span>Gripper</span><span id="vGrip">—</span></div>
+        <div class="row"><span>bHomed</span><span id="vHomed">FALSE</span></div>
         <div class="row"><span>Dispatched to</span><span id="vDispatch" class="mono">RunAutomatic</span></div>
       </div>
 
@@ -242,11 +255,13 @@
       registration list to keep in step.
     </p>
     <p>
-      <strong>Manual and Homing do nothing here, on purpose.</strong> Press them.
-      <code>FB_ModeNode</code> dispatches to <code>RunManual()</code> and
-      <code>RunHoming()</code>, but this demo's handling unit never overrides them,
-      so the base class's empty default runs. A unit implements only the modes it
-      actually needs.
+      <strong>Each mode is one method.</strong> <code>FB_ModeNode</code> dispatches
+      the cycle to <code>RunAutomatic()</code>, <code>RunManual()</code>,
+      <code>RunHoming()</code> or <code>RunStop()</code> — so a mode is not a flag
+      threaded through the logic, it is a place to put code. Homing opens the
+      gripper <em>before</em> raising the lift, which is why it deserves a mode of
+      its own rather than a single command: raising a loaded gripper would carry
+      the part away from its nest.
     </p>
     <p>
       <strong>The cylinders keep running in Stop.</strong> They extend
@@ -295,7 +310,9 @@
     step: 0, active: true,
     lift:    { target: false, at: false, t: 0 },
     gripper: { target: false, at: false, t: 0 },
-    holding: false,
+    holding: false, homed: false,
+    jog: { bJogLiftDown: false, bJogLiftUp: false,
+           bJogGripClose: false, bJogGripOpen: false },
     scanT: 0, scanIdx: 0, modeFlash: 0
   };
 
@@ -324,12 +341,34 @@
       if (state.step >= SEQ.length) state.step = 0;
     }
   }
-  function runStop() { state.step = 0; state.active = false; }   // fbCycle.Reset()
+  // --- RunManual: each button drives a device, opposing buttons cancel ------
+  function runManual() {
+    var j = state.jog;
+    if (j.bJogLiftDown && !j.bJogLiftUp)         command(state.lift, true);
+    else if (j.bJogLiftUp && !j.bJogLiftDown)    command(state.lift, false);
+    if (j.bJogGripClose && !j.bJogGripOpen)      command(state.gripper, true);
+    else if (j.bJogGripOpen && !j.bJogGripClose) command(state.gripper, false);
+    if (j.bJogLiftDown || j.bJogLiftUp || j.bJogGripClose || j.bJogGripOpen)
+      state.homed = false;
+  }
+
+  // --- RunHoming: gripper opens first, then the lift raises -----------------
+  function runHoming() {
+    if (command(state.gripper, false) === "eDone" &&
+        command(state.lift, false) === "eDone") state.homed = true;
+  }
+
+  // --- RunStop: reset the sequence and drop any held jog --------------------
+  function runStop() {
+    state.step = 0; state.active = false; state.homed = false;
+    for (var k in state.jog) state.jog[k] = false;
+  }
 
   function tick(dt) {
-    if (state.mode === "eAutomatic")      runAutomatic();
-    else if (state.mode === "eStop")      runStop();
-    // eManual / eHoming: the base class defaults do nothing.
+    if (state.mode === "eAutomatic")   runAutomatic();
+    else if (state.mode === "eManual") runManual();
+    else if (state.mode === "eHoming") runHoming();
+    else                               runStop();
 
     cylinder(state.lift, dt);
     cylinder(state.gripper, dt);
@@ -377,12 +416,19 @@
     el("partHeld").setAttribute("opacity", state.holding ? 1 : 0);
     el("partOnTable").setAttribute("opacity", state.holding ? 0 : 1);
 
-    var idle = state.mode !== "eAutomatic";
-    el("idleBadge").style.display = idle ? "block" : "none";
-    if (idle) {
-      el("idleWhy").textContent = state.mode === "eStop"
-        ? "RunStop() ran fbCycle.Reset(), so the step engine is back at 0 and the cylinders hold their last position."
-        : "FB_HandlingUnit never overrides this mode, so FB_ModeNode's empty default runs.";
+    el("manualPanel").style.display = state.mode === "eManual" ? "block" : "none";
+    var note = el("modeNote");
+    if (state.mode === "eHoming") {
+      note.style.display = "block";
+      note.innerHTML = state.homed
+        ? "<b>Homed.</b> Gripper open, lift raised."
+        : "<b>Homing…</b> the gripper opens first, then the lift raises.";
+    } else if (state.mode === "eStop") {
+      note.style.display = "block";
+      note.innerHTML = "<b>Stopped.</b> fbCycle.Reset() ran and any held jog was " +
+        "dropped. The cylinders hold position — they are never mode-dispatched.";
+    } else {
+      note.style.display = "none";
     }
 
     el("vStep").textContent = state.step;
@@ -395,12 +441,11 @@
                      eHoming: "RunHoming", eStop: "RunStop" }[state.mode];
     el("vDispatch").textContent = dispatch + "()";
 
-    var d = el("stepdesc");
-    if (state.mode === "eAutomatic") d.innerHTML = SEQ[state.step] ? SEQ[state.step].text : "";
-    else if (state.mode === "eStop")
-      d.innerHTML = "<b>RunStop()</b> called fbCycle.Reset() — the step engine is back at 0. The cylinders hold position.";
-    else
-      d.innerHTML = "<b>" + dispatch + "()</b> is not overridden by this unit, so the base class's empty default runs. Nothing moves — by design.";
+    el("vHomed").textContent = state.homed ? "TRUE" : "FALSE";
+    el("vHomed").style.color = state.homed ? "var(--ok)" : "var(--muted)";
+
+    el("stepdesc").innerHTML = state.mode === "eAutomatic"
+      ? (SEQ[state.step] ? SEQ[state.step].text : "") : "";
   }
 
   var last = null;
@@ -435,6 +480,22 @@
         "fbOpMode.Mode := E_OpMode." + state.mode + "  →  SetMode() down the tree";
     });
   });
+  // Jog buttons are held, not clicked — same as a real panel.
+  Array.prototype.forEach.call(document.querySelectorAll(".jog"), function (b) {
+    var key = b.getAttribute("data-jog");
+    function hold(down) {
+      return function (e) {
+        e.preventDefault();
+        state.jog[key] = down;
+        b.classList.toggle("held", down);
+      };
+    }
+    b.addEventListener("pointerdown", hold(true));
+    b.addEventListener("pointerup", hold(false));
+    b.addEventListener("pointerleave", hold(false));
+    b.addEventListener("pointercancel", hold(false));
+  });
+
   el("pause").addEventListener("click", function () {
     state.running = !state.running;
     this.textContent = state.running ? "Pause" : "Play";
