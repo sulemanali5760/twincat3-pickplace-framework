@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_Test" Id="{3306825f-7f01-4b85-9db2-389af851c0d0}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+    // Bumped by every FB_ModeNodeSpy scan, so a test can check call order.
+    nScanCounter : DINT;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

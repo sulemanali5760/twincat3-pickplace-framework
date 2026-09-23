@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="PRG_TEST" Id="{09ee65ba-c53f-4c2a-ad4a-d9d0743e8d82}" SpecialFunc="None">
+    <Declaration><![CDATA[// PRG_TEST - runs the unit tests with TcUnit.
+//
+// PlcTask calls it after MAIN. The suites build their own instances, so they
+// never touch MAIN's machine. Results land in the Error List about a second
+// after Run. For a production build, drop PRG_TEST from the PlcTask call list.
+PROGRAM PRG_TEST
+VAR
+    fbCycleManagerTest      : FB_CycleManager_Test;
+    fbPneumaticCylinderTest : FB_PneumaticCylinder_Test;
+    fbNodeTreeTest          : FB_NodeTree_Test;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[TcUnit.RUN();]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

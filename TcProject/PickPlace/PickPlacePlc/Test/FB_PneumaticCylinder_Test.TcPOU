@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_PneumaticCylinder_Test" Id="{21dd8efa-ad56-4bc8-8ac5-fd0e028a0cb1}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for FB_PneumaticCylinder, the device driver.
+//
+// Moves take real time, so most tests run over several PLC cycles: each cycle
+// they issue the command, then call Cyclic() - the same order the handling
+// unit uses - until the result arrives or a watchdog gives up. Strokes and
+// timeouts are shortened so the whole suite finishes in well under a second.
+FUNCTION_BLOCK FB_PneumaticCylinder_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    // One cylinder per test: TcUnit runs all tests in the same cycles.
+    fbCylExtend  : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylExtend');
+    fbCylRetract : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylRetract');
+    fbCylTimeout : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylTimeout');
+    fbCylSensor  : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylSensor');
+    fbCylReverse : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylReverse');
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Extend_Simulated_ReportsDoneAfterTheStroke();
+Retract_AfterExtend_SwapsCoilsAndReportsDone();
+Extend_SensorNeverArrives_ReportsErrorAfterTimeout();
+Extend_RealSensor_ReportsDoneWhenSensorArrives();
+Reversal_MidMove_GetsTheFullTimeout();]]></ST>
+    </Implementation>
+    <Method Name="Extend_Simulated_ReportsDoneAfterTheStroke" Id="{a13292d0-88e2-4c05-bd32-4e8beb55a464}">
+      <Declaration><![CDATA[METHOD PRIVATE Extend_Simulated_ReportsDoneAfterTheStroke
+VAR_INST
+    nCycle     : DINT;
+    fbMinTime  : TON;   // eDone must not come before the stroke ...
+    fbWatchdog : TON;   // ... and must come at all
+END_VAR
+VAR
+    eResult : E_CmdResult;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Extend_Simulated_ReportsDoneAfterTheStroke');
+
+fbCylExtend.tSimStroke := T#100MS;
+eResult := fbCylExtend.Extend();
+fbCylExtend.Cyclic();
+fbMinTime(IN := TRUE, PT := T#80MS);
+fbWatchdog(IN := TRUE, PT := T#2S);
+nCycle := nCycle + 1;
+
+IF nCycle = 1 THEN
+    AssertTrue(Condition := eResult = E_CmdResult.eBusy, Message := 'a fresh move must report eBusy');
+END_IF
+
+IF eResult = E_CmdResult.eDone THEN
+    AssertTrue(Condition := fbMinTime.Q, Message := 'eDone came before the simulated stroke finished');
+    AssertTrue(Condition := fbCylExtend.bExtendCoil, Message := 'extend coil must be energised');
+    AssertFalse(Condition := fbCylExtend.bRetractCoil, Message := 'retract coil must be off');
+    TEST_FINISHED();
+ELSIF fbWatchdog.Q THEN
+    AssertTrue(Condition := FALSE, Message := 'no eDone within 2 s of a 100 ms stroke');
+    TEST_FINISHED();
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Retract_AfterExtend_SwapsCoilsAndReportsDone" Id="{f9daa206-56ac-4727-8c2a-6860728e4610}">
+      <Declaration><![CDATA[METHOD PRIVATE Retract_AfterExtend_SwapsCoilsAndReportsDone
+VAR_INST
+    bExtended  : BOOL;
+    fbWatchdog : TON;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Retract_AfterExtend_SwapsCoilsAndReportsDone');
+
+fbCylRetract.tSimStroke := T#100MS;
+fbWatchdog(IN := TRUE, PT := T#2S);
+
+IF NOT bExtended THEN
+    // Phase 1: get the cylinder out first.
+    bExtended := fbCylRetract.Extend() = E_CmdResult.eDone;
+    fbCylRetract.Cyclic();
+ELSE
+    // Phase 2: bring it back.
+    eResult := fbCylRetract.Retract();
+    fbCylRetract.Cyclic();
+    IF eResult = E_CmdResult.eDone THEN
+        AssertFalse(Condition := fbCylRetract.bExtendCoil, Message := 'extend coil must be off after retracting');
+        AssertTrue(Condition := fbCylRetract.bRetractCoil, Message := 'retract coil must be energised');
+        AssertFalse(Condition := fbCylRetract.bExtendedSensor, Message := 'extended sensor must drop when retracted');
+        TEST_FINISHED();
+    END_IF
+END_IF
+
+IF fbWatchdog.Q THEN
+    AssertTrue(Condition := FALSE, Message := 'did not extend and retract within 2 s');
+    TEST_FINISHED();
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Extend_SensorNeverArrives_ReportsErrorAfterTimeout" Id="{02224d5d-07ff-4c4f-ab86-d5239d436d6a}">
+      <Declaration><![CDATA[METHOD PRIVATE Extend_SensorNeverArrives_ReportsErrorAfterTimeout
+VAR_INST
+    fbMinTime  : TON;
+    fbWatchdog : TON;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Extend_SensorNeverArrives_ReportsErrorAfterTimeout');
+
+// Real-hardware mode with no sensor wired: the classic stuck cylinder.
+fbCylTimeout.bSimulate    := FALSE;
+fbCylTimeout.tMoveTimeout := T#200MS;
+eResult := fbCylTimeout.Extend();
+fbCylTimeout.Cyclic();
+fbMinTime(IN := TRUE, PT := T#150MS);
+fbWatchdog(IN := TRUE, PT := T#2S);
+
+IF eResult = E_CmdResult.eError THEN
+    AssertTrue(Condition := fbMinTime.Q, Message := 'eError came before the move timeout ran out');
+    TEST_FINISHED();
+ELSIF eResult = E_CmdResult.eDone THEN
+    AssertTrue(Condition := FALSE, Message := 'reported eDone although no sensor ever arrived');
+    TEST_FINISHED();
+ELSIF fbWatchdog.Q THEN
+    AssertTrue(Condition := FALSE, Message := 'no eError within 2 s of a 200 ms timeout');
+    TEST_FINISHED();
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Extend_RealSensor_ReportsDoneWhenSensorArrives" Id="{1b224667-0ee3-4f35-9521-ae3db24230e7}">
+      <Declaration><![CDATA[METHOD PRIVATE Extend_RealSensor_ReportsDoneWhenSensorArrives
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Extend_RealSensor_ReportsDoneWhenSensorArrives');
+
+// Real-hardware mode: the result must follow the sensor, not a timer.
+fbCylSensor.bSimulate := FALSE;
+
+AssertTrue(Condition := fbCylSensor.Extend() = E_CmdResult.eBusy, Message := 'must wait for the end sensor');
+fbCylSensor.Cyclic();
+AssertTrue(Condition := fbCylSensor.bExtendCoil, Message := 'the coil must be driven while waiting');
+
+fbCylSensor.bExtendedSensor := TRUE;
+AssertTrue(Condition := fbCylSensor.Extend() = E_CmdResult.eDone, Message := 'the sensor arrived but the command did not report eDone');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reversal_MidMove_GetsTheFullTimeout" Id="{39491dae-a3e9-4529-b851-5e764684034a}">
+      <Declaration><![CDATA[METHOD PRIVATE Reversal_MidMove_GetsTheFullTimeout
+VAR_INST
+    fbExtendPhase  : TON;   // how long the first move runs before reversing
+    fbSinceReverse : TON;
+    fbWatchdog     : TON;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Reversal_MidMove_GetsTheFullTimeout');
+
+// An operator jogs the lift down, changes their mind after 200 ms and jogs it
+// up. The up-move is a new move and must get the full 300 ms timeout. If the
+// watchdog kept counting from the down-move, it would time out after ~100 ms.
+fbCylReverse.bSimulate    := FALSE;
+fbCylReverse.tMoveTimeout := T#300MS;
+fbExtendPhase(IN := TRUE, PT := T#200MS);
+fbWatchdog(IN := TRUE, PT := T#2S);
+
+IF NOT fbExtendPhase.Q THEN
+    fbCylReverse.Extend();
+    fbCylReverse.Cyclic();
+ELSE
+    eResult := fbCylReverse.Retract();
+    fbCylReverse.Cyclic();
+    fbSinceReverse(IN := TRUE, PT := T#250MS);
+    IF eResult = E_CmdResult.eError THEN
+        AssertTrue(Condition := fbSinceReverse.Q, Message := 'the reversed move timed out early: time from the first move was counted against it');
+        TEST_FINISHED();
+    END_IF
+END_IF
+
+IF fbWatchdog.Q THEN
+    AssertTrue(Condition := FALSE, Message := 'the reversed move never timed out');
+    TEST_FINISHED();
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

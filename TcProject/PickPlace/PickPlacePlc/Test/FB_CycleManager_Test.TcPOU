@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CycleManager_Test" Id="{855468e0-8bd8-45df-9982-5968a801dee9}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for FB_CycleManager, the step engine every sequence runs on.
+//
+// The engine is pure logic (no timers), so every test finishes in one cycle.
+// Each test owns its FB_CycleManager, because TcUnit calls all tests in the
+// same cycle.
+FUNCTION_BLOCK FB_CycleManager_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Call_RisingEdge_StartsAtStepZero();
+Await_Busy_HoldsTheStep();
+Await_Done_AdvancesOneStep();
+Await_Error_LatchesAndHoldsTheStep();
+Error_HoldsWhileExecuteStaysHigh();
+ExecuteLow_StopsAndRisingEdgeStartsOver();
+Restart_ClearsErrorAndRunsFromStepZero();
+Reset_RearmsTheStartEdge();]]></ST>
+    </Implementation>
+    <Method Name="Call_RisingEdge_StartsAtStepZero" Id="{fb670719-8b22-49fc-8b91-d2f4e1495817}">
+      <Declaration><![CDATA[METHOD PRIVATE Call_RisingEdge_StartsAtStepZero
+VAR_INST
+    fbCycle : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Call_RisingEdge_StartsAtStepZero');
+
+fbCycle.Call(bExecute := TRUE);
+
+AssertTrue(Condition := fbCycle.Active, Message := 'rising edge of execute must activate the sequence');
+AssertEquals_DINT(Expected := 0, Actual := fbCycle.Step, Message := 'a new run must start at step 0');
+AssertFalse(Condition := fbCycle.Error, Message := 'a new run must start without an error');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Await_Busy_HoldsTheStep" Id="{b366ed42-7e3f-49fa-a5ba-0929f62c3236}">
+      <Declaration><![CDATA[METHOD PRIVATE Await_Busy_HoldsTheStep
+VAR_INST
+    fbCycle : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Await_Busy_HoldsTheStep');
+
+fbCycle.Call(bExecute := TRUE);
+
+AssertFalse(Condition := fbCycle.Await(E_CmdResult.eBusy), Message := 'Await must return FALSE while the command is busy');
+AssertEquals_DINT(Expected := 0, Actual := fbCycle.Step, Message := 'a busy command must not advance the step');
+AssertTrue(Condition := fbCycle.Active, Message := 'a busy command must not stop the sequence');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Await_Done_AdvancesOneStep" Id="{864dcebc-3476-4f69-94a7-eeae48f8211c}">
+      <Declaration><![CDATA[METHOD PRIVATE Await_Done_AdvancesOneStep
+VAR_INST
+    fbCycle : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Await_Done_AdvancesOneStep');
+
+fbCycle.Call(bExecute := TRUE);
+
+AssertTrue(Condition := fbCycle.Await(E_CmdResult.eDone), Message := 'Await must return TRUE on the call that advances');
+AssertEquals_DINT(Expected := 1, Actual := fbCycle.Step, Message := 'eDone must advance exactly one step');
+
+fbCycle.Await(E_CmdResult.eDone);
+AssertEquals_DINT(Expected := 2, Actual := fbCycle.Step, Message := 'each eDone must advance one more step');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Await_Error_LatchesAndHoldsTheStep" Id="{3cdaa162-a5f4-451a-b876-1e3a1bf5fceb}">
+      <Declaration><![CDATA[METHOD PRIVATE Await_Error_LatchesAndHoldsTheStep
+VAR_INST
+    fbCycle : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Await_Error_LatchesAndHoldsTheStep');
+
+fbCycle.Call(bExecute := TRUE);
+fbCycle.Await(E_CmdResult.eDone);
+fbCycle.Await(E_CmdResult.eError);
+
+AssertTrue(Condition := fbCycle.Error, Message := 'eError must latch the error flag');
+AssertFalse(Condition := fbCycle.Active, Message := 'eError must stop the sequence');
+AssertEquals_DINT(Expected := 1, Actual := fbCycle.Step, Message := 'the step must stay where the error happened');
+
+fbCycle.Await(E_CmdResult.eDone);
+AssertEquals_DINT(Expected := 1, Actual := fbCycle.Step, Message := 'a held sequence must ignore further results');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Error_HoldsWhileExecuteStaysHigh" Id="{e6b67fef-53fc-4b38-b597-d4e3d2c80d57}">
+      <Declaration><![CDATA[METHOD PRIVATE Error_HoldsWhileExecuteStaysHigh
+VAR_INST
+    fbCycle : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Error_HoldsWhileExecuteStaysHigh');
+
+// RunAutomatic calls Call(TRUE) every scan. An error must not be cleared by
+// that alone, or a timed-out move would be retried forever without anyone
+// noticing.
+fbCycle.Call(bExecute := TRUE);
+fbCycle.Await(E_CmdResult.eError);
+fbCycle.Call(bExecute := TRUE);
+
+AssertFalse(Condition := fbCycle.Active, Message := 'execute held high must not restart after an error');
+AssertTrue(Condition := fbCycle.Error, Message := 'the error must stay latched until Reset or Restart');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ExecuteLow_StopsAndRisingEdgeStartsOver" Id="{1355b5e8-9989-4986-b927-9e413401f7ad}">
+      <Declaration><![CDATA[METHOD PRIVATE ExecuteLow_StopsAndRisingEdgeStartsOver
+VAR_INST
+    fbCycle : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ExecuteLow_StopsAndRisingEdgeStartsOver');
+
+fbCycle.Call(bExecute := TRUE);
+fbCycle.Await(E_CmdResult.eDone);
+fbCycle.Call(bExecute := FALSE);
+
+AssertFalse(Condition := fbCycle.Active, Message := 'dropping execute must stop the sequence');
+fbCycle.Await(E_CmdResult.eDone);
+AssertEquals_DINT(Expected := 1, Actual := fbCycle.Step, Message := 'a stopped sequence must not advance');
+
+fbCycle.Call(bExecute := TRUE);
+AssertTrue(Condition := fbCycle.Active, Message := 'a new rising edge must start the sequence again');
+AssertEquals_DINT(Expected := 0, Actual := fbCycle.Step, Message := 'a new rising edge must start over at step 0');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Restart_ClearsErrorAndRunsFromStepZero" Id="{2f2ef4e8-bf23-47ae-bd3f-86c597f91144}">
+      <Declaration><![CDATA[METHOD PRIVATE Restart_ClearsErrorAndRunsFromStepZero
+VAR_INST
+    fbCycle : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Restart_ClearsErrorAndRunsFromStepZero');
+
+fbCycle.Call(bExecute := TRUE);
+fbCycle.Await(E_CmdResult.eDone);
+fbCycle.Await(E_CmdResult.eError);
+fbCycle.Restart();
+
+AssertEquals_DINT(Expected := 0, Actual := fbCycle.Step, Message := 'Restart must jump back to step 0');
+AssertFalse(Condition := fbCycle.Error, Message := 'Restart must clear the error');
+AssertTrue(Condition := fbCycle.Active, Message := 'Restart must keep the sequence running');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset_RearmsTheStartEdge" Id="{10ac1676-630c-4cf0-8bde-67357a88fcef}">
+      <Declaration><![CDATA[METHOD PRIVATE Reset_RearmsTheStartEdge
+VAR_INST
+    fbCycle : FB_CycleManager;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Reset_RearmsTheStartEdge');
+
+// RunStop calls Reset. When the machine goes back to automatic, execute is
+// still TRUE from the unit's point of view - Reset must make that count as a
+// fresh start, or the sequence would never run again.
+fbCycle.Call(bExecute := TRUE);
+fbCycle.Await(E_CmdResult.eDone);
+fbCycle.Reset();
+
+AssertFalse(Condition := fbCycle.Active, Message := 'Reset must stop the sequence');
+AssertEquals_DINT(Expected := 0, Actual := fbCycle.Step, Message := 'Reset must return to step 0');
+
+fbCycle.Call(bExecute := TRUE);
+AssertTrue(Condition := fbCycle.Active, Message := 'after Reset, execute high must start a new run');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -57,11 +57,30 @@
     <Compile Include="Machine\MAIN.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Test\GVL_Test.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_ModeNodeSpy.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_CycleManager_Test.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_PneumaticCylinder_Test.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_NodeTree_Test.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\PRG_TEST.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Framework" />
     <Folder Include="Devices" />
     <Folder Include="Machine" />
+    <Folder Include="Test" />
   </ItemGroup>
   <ItemGroup>
     <PlaceholderReference Include="Tc2_Standard">
@@ -76,6 +95,10 @@
       <DefaultResolution>Tc3_Module, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc3_Module</Namespace>
       <SystemLibrary>true</SystemLibrary>
+    </PlaceholderReference>
+    <PlaceholderReference Include="TcUnit">
+      <DefaultResolution>TcUnit, * (www.tcunit.org)</DefaultResolution>
+      <Namespace>TcUnit</Namespace>
     </PlaceholderReference>
   </ItemGroup>
   <ProjectExtensions>

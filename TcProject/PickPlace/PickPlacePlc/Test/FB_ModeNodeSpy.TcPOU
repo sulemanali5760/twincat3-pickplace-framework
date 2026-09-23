@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ModeNodeSpy" Id="{a415b811-aef7-4946-93a9-ade81f586888}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_ModeNodeSpy - test double for the node tree.
+//
+// A mode node that does nothing except record what the framework did to it:
+// how often each Run* method was dispatched, and when in the scan it ran.
+// The framework only reaches a node through I_Node and the protected Run*
+// methods, so a spy that overrides exactly those sees every call.
+FUNCTION_BLOCK FB_ModeNodeSpy EXTENDS FB_ModeNode
+VAR_OUTPUT
+    nAutomaticCalls : DINT;
+    nManualCalls    : DINT;
+    nHomingCalls    : DINT;
+    nStopCalls      : DINT;
+    nScanOrder      : DINT;   // GVL_Test.nScanCounter when this node last ran
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="OnCyclic" Id="{e0ede19a-c035-435e-afc9-393665eac9fc}">
+      <Declaration><![CDATA[// Stamp the scan position, then let FB_ModeNode dispatch by mode as usual.
+METHOD PROTECTED OnCyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[GVL_Test.nScanCounter := GVL_Test.nScanCounter + 1;
+nScanOrder := GVL_Test.nScanCounter;
+SUPER^.OnCyclic();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunAutomatic" Id="{4171d4f5-5aa7-4ba2-b744-ad84bc41588a}">
+      <Declaration><![CDATA[METHOD PROTECTED RunAutomatic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nAutomaticCalls := nAutomaticCalls + 1;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunManual" Id="{53e995d9-7e6f-41b4-bb6c-1243224139bf}">
+      <Declaration><![CDATA[METHOD PROTECTED RunManual
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nManualCalls := nManualCalls + 1;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunHoming" Id="{c348b9ea-8ba5-4930-bfe7-17cb0edc6d24}">
+      <Declaration><![CDATA[METHOD PROTECTED RunHoming
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nHomingCalls := nHomingCalls + 1;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunStop" Id="{b636aa1e-62ce-45fd-b87f-c217d3ac9f67}">
+      <Declaration><![CDATA[METHOD PROTECTED RunStop
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nStopCalls := nStopCalls + 1;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

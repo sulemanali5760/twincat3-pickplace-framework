@@ -84,6 +84,35 @@ To drive real hardware: set each device's `bSimulate := FALSE` and map
 
 Built against TwinCAT 3.1.4026.25, target `TwinCAT RT (x64)`.
 
+## Tests
+
+18 unit tests in `Test/`, written with [TcUnit](https://tcunit.org). They run
+on the soft-PLC next to the machine and report in the Error List.
+
+| Suite | What it pins down |
+|---|---|
+| `FB_CycleManager_Test` (8) | start on a rising edge, busy holds, done advances one step, errors latch and hold even while execute stays high, `Restart` / `Reset` re-arm correctly |
+| `FB_PneumaticCylinder_Test` (5) | simulated strokes report `eDone` no earlier than the stroke, a missing sensor ends in `eError` after the timeout, real-sensor mode follows the sensor, a reversed move gets its full timeout |
+| `FB_NodeTree_Test` (5) | `SetMode` reaches every node, a parent always runs before its children (depth-first), each mode reaches its own `Run*` method, the 17th child is dropped, `FB_OpModeHandler` runs the tree in its mode |
+
+The tree tests use `FB_ModeNodeSpy`, a test double that only records which
+`Run*` method the framework called and when.
+
+**Run them:**
+
+1. Install TcUnit once: download `TcUnit.library` from the
+   [releases page](https://github.com/tcunit/TcUnit/releases), then in XAE
+   *PLC → Library Repository → Install*.
+2. Build, Activate Configuration, Run. `PRG_TEST` is called from `PlcTask`
+   after `MAIN`.
+3. About a second later the Error List shows each result and a summary line.
+
+For a production build, remove `PRG_TEST` from the `PlcTask` call list.
+
+The tests cover the framework and the device driver. The handling unit's
+sequence is left to a system-level test against a simulated machine, where it
+can be checked end to end rather than method by method.
+
 ## Use it in your own machine
 
 The framework is six objects; the other six are the example. To build your own

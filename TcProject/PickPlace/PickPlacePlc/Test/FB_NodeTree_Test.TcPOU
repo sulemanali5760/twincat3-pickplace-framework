@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_NodeTree_Test" Id="{76ed4ebb-cd87-4204-8264-f630cf8dad89}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for the framework core: FB_CyclicNode (tree, registration, recursion),
+// FB_ModeNode (dispatch by mode) and FB_OpModeHandler (the entry point).
+//
+// The trees are built from FB_ModeNodeSpy, declared the same way a real
+// machine is: each node names its parent and registers itself in FB_init.
+// Every test gets its own tree, because TcUnit calls all tests in the same
+// cycle.
+FUNCTION_BLOCK FB_NodeTree_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    // Root -> A -> Grand, Root -> B
+    fbModeRoot   : FB_ModeNodeSpy(ipParent := 0,           sNodeName := 'ModeRoot');
+    fbModeA      : FB_ModeNodeSpy(ipParent := fbModeRoot,  sNodeName := 'ModeA');
+    fbModeGrand  : FB_ModeNodeSpy(ipParent := fbModeA,     sNodeName := 'ModeGrand');
+    fbModeB      : FB_ModeNodeSpy(ipParent := fbModeRoot,  sNodeName := 'ModeB');
+
+    // Same shape, for the call-order test
+    fbOrderRoot  : FB_ModeNodeSpy(ipParent := 0,           sNodeName := 'OrderRoot');
+    fbOrderA     : FB_ModeNodeSpy(ipParent := fbOrderRoot, sNodeName := 'OrderA');
+    fbOrderGrand : FB_ModeNodeSpy(ipParent := fbOrderA,    sNodeName := 'OrderGrand');
+    fbOrderB     : FB_ModeNodeSpy(ipParent := fbOrderRoot, sNodeName := 'OrderB');
+
+    fbDispatch    : FB_ModeNodeSpy(ipParent := 0, sNodeName := 'Dispatch');
+    fbCapRoot     : FB_ModeNodeSpy(ipParent := 0, sNodeName := 'CapRoot');
+    fbCapChild    : FB_ModeNodeSpy(ipParent := 0, sNodeName := 'CapChild');
+    fbHandlerRoot : FB_ModeNodeSpy(ipParent := 0, sNodeName := 'HandlerRoot');
+    fbHandler     : FB_OpModeHandler;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[SetMode_ReachesEveryNodeInTheTree();
+Cyclic_RunsParentBeforeChildren_DepthFirst();
+OnCyclic_DispatchesEachModeToItsOwnMethod();
+RegisterChild_DropsChildrenBeyondTheLimit();
+OpModeHandler_RunsTheTreeInItsMode();]]></ST>
+    </Implementation>
+    <Method Name="SetMode_ReachesEveryNodeInTheTree" Id="{73f86c43-9572-4b85-b24a-ac34c81473de}">
+      <Declaration><![CDATA[METHOD PRIVATE SetMode_ReachesEveryNodeInTheTree
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SetMode_ReachesEveryNodeInTheTree');
+
+// One call on the root, then one scan: every node, down to the grandchild,
+// must run in the new mode.
+fbModeRoot.SetMode(E_OpMode.eHoming);
+fbModeRoot.Cyclic();
+
+AssertEquals_DINT(Expected := 1, Actual := fbModeRoot.nHomingCalls,  Message := 'root did not run RunHoming');
+AssertEquals_DINT(Expected := 1, Actual := fbModeA.nHomingCalls,     Message := 'child A did not run RunHoming');
+AssertEquals_DINT(Expected := 1, Actual := fbModeGrand.nHomingCalls, Message := 'grandchild did not run RunHoming');
+AssertEquals_DINT(Expected := 1, Actual := fbModeB.nHomingCalls,     Message := 'child B did not run RunHoming');
+AssertEquals_DINT(Expected := 0, Actual := fbModeGrand.nStopCalls,   Message := 'grandchild still ran the old mode');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Cyclic_RunsParentBeforeChildren_DepthFirst" Id="{42f42567-8edb-4e93-8260-34c47d3b6bde}">
+      <Declaration><![CDATA[METHOD PRIVATE Cyclic_RunsParentBeforeChildren_DepthFirst
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Cyclic_RunsParentBeforeChildren_DepthFirst');
+
+// The README promises "no one-cycle lag": a unit sets device targets and the
+// devices act on them in the same scan. That only holds if a parent always
+// runs before its children.
+fbOrderRoot.Cyclic();
+
+AssertTrue(Condition := fbOrderRoot.nScanOrder < fbOrderA.nScanOrder,  Message := 'root must run before its children');
+AssertTrue(Condition := fbOrderA.nScanOrder < fbOrderGrand.nScanOrder, Message := 'child A must run before its own child');
+AssertTrue(Condition := fbOrderGrand.nScanOrder < fbOrderB.nScanOrder, Message := 'subtree A must finish before sibling B starts');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OnCyclic_DispatchesEachModeToItsOwnMethod" Id="{f01724bb-a994-49ae-a08e-d4f77df34bb0}">
+      <Declaration><![CDATA[METHOD PRIVATE OnCyclic_DispatchesEachModeToItsOwnMethod
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('OnCyclic_DispatchesEachModeToItsOwnMethod');
+
+fbDispatch.SetMode(E_OpMode.eAutomatic);
+fbDispatch.Cyclic();
+fbDispatch.SetMode(E_OpMode.eManual);
+fbDispatch.Cyclic();
+fbDispatch.SetMode(E_OpMode.eHoming);
+fbDispatch.Cyclic();
+fbDispatch.SetMode(E_OpMode.eStop);
+fbDispatch.Cyclic();
+
+AssertEquals_DINT(Expected := 1, Actual := fbDispatch.nAutomaticCalls, Message := 'eAutomatic must run RunAutomatic once');
+AssertEquals_DINT(Expected := 1, Actual := fbDispatch.nManualCalls,    Message := 'eManual must run RunManual once');
+AssertEquals_DINT(Expected := 1, Actual := fbDispatch.nHomingCalls,    Message := 'eHoming must run RunHoming once');
+AssertEquals_DINT(Expected := 1, Actual := fbDispatch.nStopCalls,      Message := 'eStop must run RunStop once');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RegisterChild_DropsChildrenBeyondTheLimit" Id="{4bd2ebba-e1ca-4964-9786-dc73e7464eec}">
+      <Declaration><![CDATA[METHOD PRIVATE RegisterChild_DropsChildrenBeyondTheLimit
+VAR
+    nI : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('RegisterChild_DropsChildrenBeyondTheLimit');
+
+// Register one more child than the array holds. The extra one must be
+// dropped, not written past the end of aChildren. Registering the same spy
+// repeatedly lets one counter show how many slots were filled.
+FOR nI := 1 TO GVL_Framework.cMaxChildren + 1 DO
+    fbCapRoot.RegisterChild(fbCapChild);
+END_FOR
+fbCapRoot.Cyclic();
+
+AssertEquals_DINT(Expected := GVL_Framework.cMaxChildren, Actual := fbCapChild.nStopCalls,
+                  Message := 'the root must scan exactly cMaxChildren children');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OpModeHandler_RunsTheTreeInItsMode" Id="{b92b6509-bfa9-43bb-8c58-03f096f374fd}">
+      <Declaration><![CDATA[METHOD PRIVATE OpModeHandler_RunsTheTreeInItsMode
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('OpModeHandler_RunsTheTreeInItsMode');
+
+// MAIN does exactly this: hand the handler a root, pick a mode, call Cyclic.
+fbHandler.SetRoot(fbHandlerRoot);
+fbHandler.Mode := E_OpMode.eManual;
+fbHandler.Cyclic();
+
+AssertEquals_DINT(Expected := 1, Actual := fbHandlerRoot.nManualCalls, Message := 'the handler must push its mode before running the tree');
+AssertEquals_DINT(Expected := 0, Actual := fbHandlerRoot.nStopCalls,   Message := 'the root ran in its default mode instead of the handler''s');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
