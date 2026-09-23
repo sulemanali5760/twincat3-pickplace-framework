@@ -50,7 +50,7 @@ END_VAR]]></Declaration>
         <ST><![CDATA[bTargetExtend := TRUE;
 IF bExtendedSensor THEN
     Extend := E_CmdResult.eDone;
-ELSIF fbTimeout.Q THEN
+ELSIF fbTimeout.Q AND bLastTarget THEN   // the timer is this move's, not the last one's
     Extend := E_CmdResult.eError;
 ELSE
     Extend := E_CmdResult.eBusy;
@@ -65,7 +65,7 @@ END_VAR]]></Declaration>
         <ST><![CDATA[bTargetExtend := FALSE;
 IF bRetractedSensor THEN
     Retract := E_CmdResult.eDone;
-ELSIF fbTimeout.Q THEN
+ELSIF fbTimeout.Q AND NOT bLastTarget THEN   // the timer is this move's, not the last one's
     Retract := E_CmdResult.eError;
 ELSE
     Retract := E_CmdResult.eBusy;
@@ -82,18 +82,24 @@ END_VAR]]></Declaration>
 bExtendCoil  := bTargetExtend;
 bRetractCoil := NOT bTargetExtend;
 
+// A new target is a new move: it gets the full timeout, even if the last move
+// was still under way. In simulation, also drop both sensors and restart the
+// stroke.
+IF bTargetExtend <> bLastTarget THEN
+    bLastTarget := bTargetExtend;
+    fbTimeout(IN := FALSE);
+    IF bSimulate THEN
+        bExtendedSensor  := FALSE;
+        bRetractedSensor := FALSE;
+        fbSimStroke(IN := FALSE);
+    END_IF
+END_IF
+
 fbTimeout(IN := (bTargetExtend AND NOT bExtendedSensor)
               OR (NOT bTargetExtend AND NOT bRetractedSensor),
           PT := tMoveTimeout);
 
 IF bSimulate THEN
-    // On a target change, clear both sensors and restart the stroke timer.
-    IF bTargetExtend <> bLastTarget THEN
-        bExtendedSensor  := FALSE;
-        bRetractedSensor := FALSE;
-        bLastTarget      := bTargetExtend;
-        fbSimStroke(IN := FALSE);
-    END_IF
     fbSimStroke(IN := TRUE, PT := tSimStroke);
     IF fbSimStroke.Q THEN
         bExtendedSensor  := bTargetExtend;

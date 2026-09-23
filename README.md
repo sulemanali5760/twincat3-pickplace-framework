@@ -86,13 +86,13 @@ Built against TwinCAT 3.1.4026.25, target `TwinCAT RT (x64)`.
 
 ## Tests
 
-18 unit tests in `Test/`, written with [TcUnit](https://tcunit.org). They run
+19 unit tests in `Test/`, written with [TcUnit](https://tcunit.org). They run
 on the soft-PLC next to the machine and report in the Error List.
 
 | Suite | What it pins down |
 |---|---|
 | `FB_CycleManager_Test` (8) | start on a rising edge, busy holds, done advances one step, errors latch and hold even while execute stays high, `Restart` / `Reset` re-arm correctly |
-| `FB_PneumaticCylinder_Test` (5) | simulated strokes report `eDone` no earlier than the stroke, a missing sensor ends in `eError` after the timeout, real-sensor mode follows the sensor, a reversed move gets its full timeout |
+| `FB_PneumaticCylinder_Test` (6) | simulated strokes report `eDone` no earlier than the stroke, a missing sensor ends in `eError` after the timeout, real-sensor mode follows the sensor, a reversed move gets its full timeout and does not inherit the last move's timeout |
 | `FB_NodeTree_Test` (5) | `SetMode` reaches every node, a parent always runs before its children (depth-first), each mode reaches its own `Run*` method, the 17th child is dropped, `FB_OpModeHandler` runs the tree in its mode |
 
 The tree tests use `FB_ModeNodeSpy`, a test double that only records which

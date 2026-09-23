@@ -15,13 +15,15 @@ VAR
     fbCylTimeout : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylTimeout');
     fbCylSensor  : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylSensor');
     fbCylReverse : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylReverse');
+    fbCylRetry   : FB_PneumaticCylinder(ipParent := 0, sNodeName := 'CylRetry');
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[Extend_Simulated_ReportsDoneAfterTheStroke();
 Retract_AfterExtend_SwapsCoilsAndReportsDone();
 Extend_SensorNeverArrives_ReportsErrorAfterTimeout();
 Extend_RealSensor_ReportsDoneWhenSensorArrives();
-Reversal_MidMove_GetsTheFullTimeout();]]></ST>
+Reversal_MidMove_GetsTheFullTimeout();
+Reversal_AfterTimeout_StartsBusyNotFailed();]]></ST>
     </Implementation>
     <Method Name="Extend_Simulated_ReportsDoneAfterTheStroke" Id="{a13292d0-88e2-4c05-bd32-4e8beb55a464}">
       <Declaration><![CDATA[METHOD PRIVATE Extend_Simulated_ReportsDoneAfterTheStroke
@@ -183,6 +185,40 @@ END_IF
 
 IF fbWatchdog.Q THEN
     AssertTrue(Condition := FALSE, Message := 'the reversed move never timed out');
+    TEST_FINISHED();
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reversal_AfterTimeout_StartsBusyNotFailed" Id="{913569ed-43e0-4c1e-91d9-7b78f24d1f87}">
+      <Declaration><![CDATA[METHOD PRIVATE Reversal_AfterTimeout_StartsBusyNotFailed
+VAR_INST
+    bTimedOut  : BOOL;
+    fbWatchdog : TON;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Reversal_AfterTimeout_StartsBusyNotFailed');
+
+// The lift timed out going down and the operator sends it back up. The
+// expired timer belongs to the old move, so the first answer for the new move
+// must be eBusy, not an instant eError.
+fbCylRetry.bSimulate    := FALSE;
+fbCylRetry.tMoveTimeout := T#100MS;
+fbWatchdog(IN := TRUE, PT := T#2S);
+
+IF NOT bTimedOut THEN
+    bTimedOut := fbCylRetry.Extend() = E_CmdResult.eError;
+    fbCylRetry.Cyclic();
+ELSE
+    eResult := fbCylRetry.Retract();
+    AssertTrue(Condition := eResult = E_CmdResult.eBusy, Message := 'the new move reported the old move''s timeout');
+    TEST_FINISHED();
+END_IF
+
+IF fbWatchdog.Q THEN
+    AssertTrue(Condition := FALSE, Message := 'the first move never timed out');
     TEST_FINISHED();
 END_IF]]></ST>
       </Implementation>
