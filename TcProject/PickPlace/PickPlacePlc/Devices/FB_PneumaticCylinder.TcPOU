@@ -11,11 +11,12 @@
 // bSimulate is on by default so the sequence steps on a soft-PLC with no I/O
 // mapped: the end sensors are faked after tSimStroke. Set it FALSE and map the
 // four I/O variables to real terminals for a machine.
+//
+// Sensors and settings are inputs and the coils are outputs, so a test (or the
+// machine that owns the cylinder) can set them without reaching into internals.
 FUNCTION_BLOCK FB_PneumaticCylinder EXTENDS FB_CyclicNode
-VAR
-    // --- Hardware I/O (map to real terminals; e.g. AT %Q* / AT %I*) ---
-    bExtendCoil      : BOOL;
-    bRetractCoil     : BOOL;
+VAR_INPUT
+    // --- Hardware inputs (map to real terminals, e.g. AT %I*) ---
     bExtendedSensor  : BOOL;
     bRetractedSensor : BOOL;
 
@@ -23,7 +24,13 @@ VAR
     tMoveTimeout     : TIME := T#5S;
     bSimulate        : BOOL := TRUE;
     tSimStroke       : TIME := T#500MS;
-
+END_VAR
+VAR_OUTPUT
+    // --- Hardware outputs (map to real terminals, e.g. AT %Q*) ---
+    bExtendCoil      : BOOL;
+    bRetractCoil     : BOOL;
+END_VAR
+VAR
     // --- Internal state ---
     bTargetExtend    : BOOL;
     bLastTarget      : BOOL;
