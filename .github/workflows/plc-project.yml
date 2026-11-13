@@ -1,0 +1,20 @@
+name: plc-project
+
+# TwinCAT builds on Windows with XAE, so a compile job is not possible here.
+# This checks the project graph instead: every object file is listed in the
+# .plcproj, every listed file exists, and every file is well-formed XML.
+on:
+  push:
+  pull_request:
+
+jobs:
+  project-graph:
+    name: TcPOU XML and .plcproj file list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check the TwinCAT project graph
+        run: python .github/check_plc_project.py
