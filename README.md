@@ -123,6 +123,30 @@ can be checked end to end rather than method by method.
 
 ## Use it in your own machine
 
+### Install it as a library
+
+The framework ships as a TwinCAT library, **`NodeTree.library`**: the
+`Framework/` objects plus `FB_PneumaticCylinder` as a device example. It is
+attached to every [release](https://github.com/sulemanali5760/twincat3-pickplace-framework/releases).
+
+1. Download `NodeTree.library` from the latest release.
+2. In TwinCAT XAE: *PLC → Library Repository → Install*, choose the file.
+3. In your PLC project: *References → Add library → NodeTree (sulemanali5760)*.
+
+Names work unqualified (`FB_CyclicNode`) or with the namespace
+(`NodeTree.FB_CyclicNode`). Checked on 14 Nov 2026: the
+[warehouse project](https://github.com/sulemanali5760/twincat3-hrl-virtual-commissioning)
+builds with 0 errors against the installed library, and fails when the
+reference is removed.
+
+To rebuild the library from source (TwinCAT XAE 3.1.4026 and Python 3 needed):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\save_library.ps1 -Version 1.0.0.0
+```
+
+### Or copy the source
+
 The framework is six objects; the other six are the example. To build your own
 unit, copy the `Framework/` folder into your PLC project and delete
 `Devices/` and `Machine/`.
