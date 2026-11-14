@@ -213,7 +213,7 @@ IF NOT bTimedOut THEN
     fbCylRetry.Cyclic();
 ELSE
     eResult := fbCylRetry.Retract();
-    AssertTrue(Condition := eResult = E_CmdResult.eBusy, Message := 'the new move reported the old move''s timeout');
+    AssertTrue(Condition := eResult = E_CmdResult.eBusy, Message := 'the new move reported the old move$'s timeout');
     TEST_FINISHED();
 END_IF
 

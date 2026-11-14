@@ -15,6 +15,7 @@ matches the file name, which is what TwinCAT assumes when it loads a project.
 
 from __future__ import annotations
 
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -45,6 +46,9 @@ def compiled_files() -> set[Path]:
     return found
 
 
+DOUBLED_QUOTE = re.compile(r"\w''\w")
+
+
 def check_object(path: Path) -> None:
     try:
         document = ET.parse(path)
@@ -58,6 +62,11 @@ def check_object(path: Path) -> None:
         errors.append(
             f"{rel(path)}: declares {', '.join(named)} but the file is named {path.stem}"
         )
+    # An apostrophe inside a Structured Text string is written $' . Doubling it ('') ends the string
+    # early and the project no longer compiles; this cannot be seen without a TwinCAT build.
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if DOUBLED_QUOTE.search(line.split("//")[0]):
+            errors.append(f"{rel(path)}:{number}: '' inside a string; write $' for an apostrophe")
 
 
 def main() -> int:

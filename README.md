@@ -109,6 +109,14 @@ The tree tests use `FB_ModeNodeSpy`, a test double that only records which
 
 For a production build, remove `PRG_TEST` from the `PlcTask` call list.
 
+**What is verified, and how.** The whole project, tests included, compiles with
+0 errors on TwinCAT 3.1.4026.25 with TcUnit 1.3.1 (checked 13 Nov 2026 by a
+headless build through the Automation Interface). GitHub cannot run TwinCAT, so
+CI checks what it can: every object file is well-formed, listed in the project,
+and free of one error that only a build would otherwise show (a doubled quote
+inside a string). Running the tests still needs a TwinCAT runtime; their results
+are not produced in CI.
+
 The tests cover the framework and the device driver. The handling unit's
 sequence is left to a system-level test against a simulated machine, where it
 can be checked end to end rather than method by method.

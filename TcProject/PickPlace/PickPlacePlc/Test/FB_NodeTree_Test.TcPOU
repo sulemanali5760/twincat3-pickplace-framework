@@ -134,7 +134,7 @@ fbHandler.Mode := E_OpMode.eManual;
 fbHandler.Cyclic();
 
 AssertEquals_DINT(Expected := 1, Actual := fbHandlerRoot.nManualCalls, Message := 'the handler must push its mode before running the tree');
-AssertEquals_DINT(Expected := 0, Actual := fbHandlerRoot.nStopCalls,   Message := 'the root ran in its default mode instead of the handler''s');
+AssertEquals_DINT(Expected := 0, Actual := fbHandlerRoot.nStopCalls,   Message := 'the root ran in its default mode instead of the handler$'s');
 
 TEST_FINISHED();]]></ST>
       </Implementation>
