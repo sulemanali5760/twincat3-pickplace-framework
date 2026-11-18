@@ -136,7 +136,7 @@ attached to every [release](https://github.com/sulemanali5760/twincat3-pickplace
 
 Names work unqualified (`FB_CyclicNode`) or with the namespace
 (`NodeTree.FB_CyclicNode`). Checked on 14 Nov 2026: the
-[warehouse project](https://github.com/sulemanali5760/twincat3-hrl-virtual-commissioning)
+[warehouse project](https://github.com/sulemanali5760/twincat3-hrl-rbg-library)
 builds with 0 errors against the installed library, and fails when the
 reference is removed.
 
